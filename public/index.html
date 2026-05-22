@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fast Check-Out · Hotel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- ══ NAVBAR ══════════════════════════════════════════════════════════ -->
+  <nav class="navbar">
+    <div class="nav-logo">
+      <span class="nav-logo-text">Fast Check-Out</span>
+      <span class="nav-logo-sub">Hotel · Digital</span>
+    </div>
+    <div class="nav-actions">
+      <button id="btn-notifications" class="btn-icon" style="display:none" title="Notificações">
+        <span>🔔</span>
+        <span id="notification-badge" class="badge" style="display:none">0</span>
+      </button>
+      <button id="btn-admin-login" class="btn-ghost">Área Admin</button>
+      <button id="btn-admin-logout" class="btn-ghost" style="display:none">Sair</button>
+    </div>
+  </nav>
+
+  <!-- ══ MAIN ════════════════════════════════════════════════════════════ -->
+  <main id="main-content">
+
+    <!-- ─── GUEST VIEW ──────────────────────────────────────────────── -->
+    <section id="guest-view" class="view">
+
+      <div class="hero">
+        <p class="hero-eyebrow">Hotel · Check-Out Digital</p>
+        <h1>Consulte seu saldo<br>e faça o check-out</h1>
+        <div class="gold-line"></div>
+      </div>
+
+      <!-- Busca -->
+      <div class="guest-search-card surface">
+        <h2>Identificação do Hóspede</h2>
+        <div class="form-group">
+          <label>Nome ou Sobrenome</label>
+          <input type="text" id="guest-name" class="input-neon" placeholder="Digite seu nome…" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label>Número do Quarto</label>
+          <input type="text" id="guest-room" class="input-neon" placeholder="Ex: 101" autocomplete="off">
+        </div>
+        <button id="btn-search-guest" class="btn-primary">Consultar Saldo</button>
+      </div>
+
+      <!-- Resultado -->
+      <div id="guest-balance-view" style="display:none">
+        <div class="balance-card surface">
+
+          <!-- Cabeçalho -->
+          <div class="room-header">
+            <div class="room-number-badge">
+              <span>Quarto</span>
+              <strong id="display-room-number">101</strong>
+            </div>
+            <div class="guest-info">
+              <h3 id="display-guest-name">Hóspede</h3>
+              <span id="display-rsv">RSV: —</span>
+            </div>
+          </div>
+
+          <!-- Saldo -->
+          <div class="balance-display">
+            <span class="balance-label">Saldo Devedor</span>
+            <span id="display-balance" class="balance-amount neon-pink">R$ 0,00</span>
+          </div>
+
+          <!-- Itens adicionados -->
+          <div id="items-list"></div>
+
+          <!-- Adicionar consumo (apenas quando saldo = 0) -->
+          <div id="add-items-section" class="add-items-section" style="display:none">
+            <h4>Adicionar Consumo</h4>
+            <div class="items-grid">
+              <button class="btn-item" data-item="Água Mineral" data-price="11.00">
+                Água Mineral<span>R$ 11,00</span>
+              </button>
+              <button class="btn-item" data-item="Chocolate" data-price="12.00">
+                Chocolate<span>R$ 12,00</span>
+              </button>
+              <button class="btn-item" data-item="Teste" data-price="0.01">
+                Teste<span>R$ 0,01</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Pagamento -->
+          <div id="payment-section" class="payment-section" style="display:none">
+            <div class="payment-total">
+              <span style="color:var(--text-sub)">Total a Pagar</span>
+              <strong id="payment-total-amount">R$ 0,00</strong>
+            </div>
+            <div class="payment-buttons">
+              <button id="btn-pay-pix" class="btn-pix">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+                  <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+                </svg>
+                Pagar com PIX
+              </button>
+              <button id="btn-pay-card" class="btn-card">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/>
+                </svg>
+                Cartão / Google Pay
+              </button>
+            </div>
+          </div>
+
+          <!-- Check-out (saldo = 0) -->
+          <div id="checkout-section" class="checkout-section" style="display:none">
+            <button id="btn-checkout" class="btn-checkout">Realizar Check-Out</button>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── ADMIN LOGIN ──────────────────────────────────────────────── -->
+    <section id="admin-login-view" class="view">
+      <div class="login-card surface">
+        <div class="login-header">
+          <div class="login-icon">🔐</div>
+          <h2>Acesso Administrativo</h2>
+        </div>
+        <div class="form-group">
+          <label>E-mail</label>
+          <input type="email" id="admin-email" class="input-neon" placeholder="admin@hotel.com">
+        </div>
+        <div class="form-group">
+          <label>Senha</label>
+          <input type="password" id="admin-password" class="input-neon" placeholder="••••••••">
+        </div>
+        <button id="btn-login" class="btn-primary" style="margin-bottom:12px">Entrar</button>
+        <button id="btn-back-guest" class="btn-ghost" style="width:100%;text-align:center">← Voltar</button>
+      </div>
+    </section>
+
+    <!-- ─── ADMIN DASHBOARD ──────────────────────────────────────────── -->
+    <section id="admin-dashboard-view" class="view">
+
+      <div class="dashboard-header">
+        <h2>Dashboard</h2>
+        <div class="admin-tabs">
+          <button class="tab-btn active" data-tab="rooms">Quartos</button>
+          <button class="tab-btn" data-tab="checkouts">Check-Outs</button>
+          <button class="tab-btn" data-tab="upload">Upload Excel</button>
+        </div>
+      </div>
+
+      <!-- Tab Quartos -->
+      <div id="tab-rooms" class="tab-content active">
+        <div id="rooms-grid" class="rooms-grid">
+          <div class="empty-state">
+            <div class="empty-state-icon">🏨</div>
+            <p>Carregando quartos…</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab Check-Outs -->
+      <div id="tab-checkouts" class="tab-content">
+        <div class="checkouts-toolbar">
+          <input type="text" id="filter-room" class="input-neon input-sm" placeholder="Filtrar por quarto…">
+          <input type="datetime-local" id="filter-date" class="input-neon input-sm">
+          <button id="btn-export-excel" class="btn-secondary">Exportar Excel</button>
+        </div>
+        <div id="checkouts-list">
+          <div class="empty-state"><div class="empty-state-icon">📋</div><p>Nenhum check-out registrado.</p></div>
+        </div>
+      </div>
+
+      <!-- Tab Upload -->
+      <div id="tab-upload" class="tab-content">
+        <div class="upload-card surface">
+          <h3>Importar Reservas</h3>
+          <p>Importe um arquivo Excel com as reservas. Quartos existentes serão atualizados; novos, criados automaticamente.</p>
+
+          <div class="upload-format">
+            <h4>Colunas esperadas</h4>
+            <div class="format-columns">
+              <span class="col-tag">RSV</span>
+              <span class="col-tag">NOME</span>
+              <span class="col-tag">QUARTO</span>
+              <span class="col-tag">SALDO</span>
+              <span class="col-tag">DEBITAR</span>
+              <span class="col-tag">FATURAR</span>
+            </div>
+          </div>
+
+          <div id="upload-area" class="upload-area">
+            <input type="file" id="excel-file" accept=".xlsx,.xls" style="display:none">
+            <div class="upload-icon">📂</div>
+            <p>Clique ou arraste o arquivo aqui</p>
+            <span class="upload-hint">.xlsx ou .xls</span>
+          </div>
+
+          <div id="upload-preview" class="upload-preview" style="display:none">
+            <h4>Prévia dos dados</h4>
+            <div id="preview-table-container" class="table-container"></div>
+            <div class="upload-actions">
+              <button id="btn-cancel-upload" class="btn-ghost">Cancelar</button>
+              <button id="btn-confirm-upload" class="btn-primary" style="max-width:200px">Confirmar Upload</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </section>
+  </main>
+
+  <!-- ══ MODAL PIX ════════════════════════════════════════════════════════ -->
+  <div id="pix-modal" class="modal-overlay" style="display:none">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Pagamento via PIX</h3>
+        <button id="close-pix-modal" class="btn-close">✕</button>
+      </div>
+      <div class="pix-amount">
+        <span style="color:var(--text-sub)">Total</span>
+        <strong id="pix-amount-display">R$ 0,00</strong>
+      </div>
+
+      <div id="pix-loading" style="text-align:center;padding:44px 0">
+        <div class="spinner"></div>
+        <p style="margin-top:16px;color:var(--text-sub);font-size:.88rem">Gerando código PIX…</p>
+      </div>
+
+      <div id="pix-qr-content" style="display:none;text-align:center">
+        <canvas id="pix-qr-canvas"></canvas>
+        <div class="pix-code-container">
+          <p>Código PIX (Copia e Cola):</p>
+          <div class="pix-code-box">
+            <span id="pix-code-text"></span>
+            <button id="btn-copy-pix" class="btn-copy">Copiar</button>
+          </div>
+        </div>
+        <div class="pix-waiting">
+          <div class="pix-pulse"></div>
+          <span>Aguardando confirmação do pagamento…</span>
+        </div>
+      </div>
+
+      <div id="pix-success" class="pix-success" style="display:none">
+        <div class="success-icon">✅</div>
+        <h3>Pagamento Confirmado</h3>
+        <p>Saldo zerado. Você pode realizar o check-out agora.</p>
+        <button class="btn-checkout" style="margin-top:20px" onclick="document.getElementById('pix-modal').style.display='none'">
+          Ir para Check-Out
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ MODAL CHECKOUT ════════════════════════════════════════════════════ -->
+  <div id="checkout-modal" class="modal-overlay" style="display:none">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Confirmar Check-Out</h3>
+      </div>
+      <p style="color:var(--text-sub);font-size:.9rem;margin-bottom:4px">Confirma o encerramento da sua estadia?</p>
+      <div class="checkout-summary">
+        <div>Quarto: <strong id="checkout-room-display"></strong></div>
+        <div>Hóspede: <strong id="checkout-guest-display"></strong></div>
+        <div>Saldo: <strong style="color:var(--success)">R$ 0,00</strong></div>
+      </div>
+      <div class="modal-actions">
+        <button id="btn-cancel-checkout" class="btn-ghost">Cancelar</button>
+        <button id="btn-confirm-checkout" class="btn-checkout" style="max-width:200px">Confirmar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ PAINEL NOTIFICAÇÕES ═══════════════════════════════════════════════ -->
+  <div id="notification-panel" class="notification-panel" style="display:none">
+    <div class="panel-header">
+      <h4>Notificações</h4>
+      <button id="btn-mark-all-read" class="btn-ghost btn-sm">Marcar lidas</button>
+      <button id="close-notifications" class="btn-close">✕</button>
+    </div>
+    <div id="notifications-list" class="notifications-list">
+      <div class="notif-empty">Sem notificações</div>
+    </div>
+  </div>
+
+  <!-- ══ TOASTS ════════════════════════════════════════════════════════════ -->
+  <div id="toast-container"></div>
+
+  <!-- ══ SCRIPTS ══════════════════════════════════════════════════════════ -->
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-storage-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-functions-compat.js"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

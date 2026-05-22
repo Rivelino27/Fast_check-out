@@ -1,0 +1,42 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAdmin() {
+      return request.auth != null &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    // Quartos: leitura pública, escrita somente admin
+    match /rooms/{roomId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Pagamentos: leitura pública, criação pública, update somente via Functions (Admin SDK)
+    match /payments/{paymentId} {
+      allow read: if true;
+      allow create: if true;
+      allow update, delete: if isAdmin();
+    }
+
+    // Checkouts: leitura pública, criação pública (hóspede faz checkout), update somente admin
+    match /checkouts/{checkoutId} {
+      allow read: if true;
+      allow create: if true;
+      allow update, delete: if isAdmin();
+    }
+
+    // Notificações: somente admin lê e atualiza, criação pública (hóspede + Functions)
+    match /notifications/{notificationId} {
+      allow read, update, delete: if isAdmin();
+      allow create: if true;
+    }
+
+    // Admins: somente admin pode ler a própria lista, escrita somente via console/Functions
+    match /admins/{userId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+  }
+}
