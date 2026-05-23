@@ -1,6 +1,15 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
+
+    // Imagens de produtos: leitura pública, upload somente autenticados (admins)
+    match /products/{imageId} {
+      allow read: if true;
+      allow write: if request.auth != null
+                   && request.resource.size < 2 * 1024 * 1024  // max 2MB
+                   && request.resource.contentType.matches('image/.*');
+    }
+
     // Uploads de Excel: somente admins autenticados
     match /uploads/{allPaths=**} {
       allow read, write: if request.auth != null;

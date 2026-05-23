@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Fast Check-Out · Hotel</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -48,14 +48,14 @@
         </div>
         <div class="form-group">
           <label>Número do Quarto</label>
-          <input type="text" id="guest-room" class="input-neon" placeholder="Ex: 101" autocomplete="off">
+          <input type="text" id="guest-room" class="input-neon" placeholder="Ex: 101" autocomplete="off" inputmode="numeric">
         </div>
         <button id="btn-search-guest" class="btn-primary">Consultar Saldo</button>
       </div>
 
       <!-- Resultado -->
       <div id="guest-balance-view" style="display:none">
-        <div class="balance-card surface">
+        <div class="balance-card surface led-surface">
 
           <!-- Cabeçalho -->
           <div class="room-header">
@@ -75,22 +75,20 @@
             <span id="display-balance" class="balance-amount neon-pink">R$ 0,00</span>
           </div>
 
-          <!-- Itens adicionados -->
-          <div id="items-list"></div>
+          <!-- Carrinho -->
+          <div id="cart-items-section" style="display:none">
+            <div class="section-label">Carrinho</div>
+            <div id="cart-items-list"></div>
+          </div>
 
-          <!-- Adicionar consumo (apenas quando saldo = 0) -->
-          <div id="add-items-section" class="add-items-section" style="display:none">
-            <h4>Adicionar Consumo</h4>
-            <div class="items-grid">
-              <button class="btn-item" data-item="Água Mineral" data-price="11.00">
-                Água Mineral<span>R$ 11,00</span>
-              </button>
-              <button class="btn-item" data-item="Chocolate" data-price="12.00">
-                Chocolate<span>R$ 12,00</span>
-              </button>
-              <button class="btn-item" data-item="Teste" data-price="0.01">
-                Teste<span>R$ 0,01</span>
-              </button>
+          <!-- Catálogo de Produtos -->
+          <div id="products-section" class="products-section" style="display:none">
+            <div class="section-label">Consumo &amp; Serviços</div>
+            <div class="prod-search-row">
+              <input type="text" id="product-search" class="input-neon input-sm" placeholder="🔍 Buscar produto…" autocomplete="off">
+            </div>
+            <div id="products-grid-guest" class="products-grid-guest">
+              <div class="prod-loading"><div class="spinner" style="width:22px;height:22px;margin:0"></div><span>Carregando…</span></div>
             </div>
           </div>
 
@@ -135,11 +133,11 @@
         </div>
         <div class="form-group">
           <label>E-mail</label>
-          <input type="email" id="admin-email" class="input-neon" placeholder="admin@hotel.com">
+          <input type="email" id="admin-email" class="input-neon" placeholder="admin@hotel.com" autocomplete="email">
         </div>
         <div class="form-group">
           <label>Senha</label>
-          <input type="password" id="admin-password" class="input-neon" placeholder="••••••••">
+          <input type="password" id="admin-password" class="input-neon" placeholder="••••••••" autocomplete="current-password">
         </div>
         <button id="btn-login" class="btn-primary" style="margin-bottom:12px">Entrar</button>
         <button id="btn-back-guest" class="btn-ghost" style="width:100%;text-align:center">← Voltar</button>
@@ -153,18 +151,28 @@
         <h2>Dashboard</h2>
         <div class="admin-tabs">
           <button class="tab-btn active" data-tab="rooms">Quartos</button>
+          <button class="tab-btn" data-tab="checkins">Check-Ins</button>
           <button class="tab-btn" data-tab="checkouts">Check-Outs</button>
-          <button class="tab-btn" data-tab="upload">Upload Excel</button>
+          <button class="tab-btn" data-tab="products">Produtos</button>
+          <button class="tab-btn" data-tab="upload">Upload</button>
         </div>
       </div>
 
       <!-- Tab Quartos -->
       <div id="tab-rooms" class="tab-content active">
         <div id="rooms-grid" class="rooms-grid">
-          <div class="empty-state">
-            <div class="empty-state-icon">🏨</div>
-            <p>Carregando quartos…</p>
-          </div>
+          <div class="empty-state"><div class="empty-state-icon">🏨</div><p>Carregando quartos…</p></div>
+        </div>
+      </div>
+
+      <!-- Tab Check-Ins -->
+      <div id="tab-checkins" class="tab-content">
+        <div class="checkouts-toolbar">
+          <input type="text" id="filter-checkin-name" class="input-neon input-sm" placeholder="Buscar por hóspede…">
+          <input type="text" id="filter-checkin-room" class="input-neon input-sm" placeholder="Filtrar por quarto…">
+        </div>
+        <div id="checkins-list">
+          <div class="empty-state"><div class="empty-state-icon">🏨</div><p>Nenhuma reserva ativa.</p></div>
         </div>
       </div>
 
@@ -180,12 +188,22 @@
         </div>
       </div>
 
+      <!-- Tab Produtos -->
+      <div id="tab-products" class="tab-content">
+        <div class="checkouts-toolbar">
+          <input type="text" id="filter-prod-admin" class="input-neon input-sm" placeholder="Buscar produto…">
+          <button id="btn-new-product" class="btn-secondary" style="display:none;white-space:nowrap">+ Novo Produto</button>
+        </div>
+        <div id="products-admin-grid">
+          <div class="empty-state"><div class="empty-state-icon">📦</div><p>Nenhum produto cadastrado.</p></div>
+        </div>
+      </div>
+
       <!-- Tab Upload -->
       <div id="tab-upload" class="tab-content">
         <div class="upload-card surface">
           <h3>Importar Reservas</h3>
           <p>Importe um arquivo Excel com as reservas. Quartos existentes serão atualizados; novos, criados automaticamente.</p>
-
           <div class="upload-format">
             <h4>Colunas esperadas</h4>
             <div class="format-columns">
@@ -197,14 +215,12 @@
               <span class="col-tag">FATURAR</span>
             </div>
           </div>
-
           <div id="upload-area" class="upload-area">
             <input type="file" id="excel-file" accept=".xlsx,.xls" style="display:none">
             <div class="upload-icon">📂</div>
             <p>Clique ou arraste o arquivo aqui</p>
             <span class="upload-hint">.xlsx ou .xls</span>
           </div>
-
           <div id="upload-preview" class="upload-preview" style="display:none">
             <h4>Prévia dos dados</h4>
             <div id="preview-table-container" class="table-container"></div>
@@ -219,6 +235,53 @@
     </section>
   </main>
 
+  <!-- ══ MODAL PRODUTO (admin CRUD) ══════════════════════════════════════ -->
+  <div id="product-modal" class="modal-overlay" style="display:none">
+    <div class="modal-card" style="max-width:500px">
+      <div class="modal-header">
+        <h3 id="product-modal-title">Novo Produto</h3>
+        <button id="close-product-modal" class="btn-close">✕</button>
+      </div>
+      <div class="form-group">
+        <label>Nome do Produto</label>
+        <input type="text" id="prod-name" class="input-neon" placeholder="Ex: Água Mineral 500ml">
+      </div>
+      <div class="form-group">
+        <label>Descrição</label>
+        <input type="text" id="prod-desc" class="input-neon" placeholder="Ex: Gelada, 500ml">
+      </div>
+      <div class="form-group">
+        <label>Preço (R$)</label>
+        <input type="number" id="prod-price" class="input-neon" placeholder="0,00" min="0.01" step="0.01" inputmode="decimal">
+      </div>
+      <div class="form-group">
+        <label>Imagem</label>
+        <div class="prod-image-row">
+          <input type="text" id="prod-image-url" class="input-neon" placeholder="URL da imagem (opcional)">
+          <label for="prod-image-file" class="btn-ghost btn-sm" style="cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:5px">
+            📷 Upload
+          </label>
+          <input type="file" id="prod-image-file" accept="image/*" style="display:none">
+        </div>
+        <div id="prod-image-preview-wrap" style="display:none;margin-top:10px">
+          <img id="prod-image-preview" src="" alt="" class="prod-img-preview">
+        </div>
+      </div>
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:10px;text-transform:none;letter-spacing:0;font-size:.92rem;cursor:pointer">
+          <input type="checkbox" id="prod-available" checked style="width:17px;height:17px;accent-color:var(--blue)">
+          Produto disponível para hóspedes
+        </label>
+      </div>
+      <input type="hidden" id="prod-edit-id" value="">
+      <div class="modal-actions">
+        <button id="btn-delete-product" class="btn-danger" style="display:none;margin-right:auto">Excluir</button>
+        <button id="btn-cancel-product" class="btn-ghost">Cancelar</button>
+        <button id="btn-save-product" class="btn-primary" style="max-width:160px">Salvar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ══ MODAL PIX ════════════════════════════════════════════════════════ -->
   <div id="pix-modal" class="modal-overlay" style="display:none">
     <div class="modal-card">
@@ -230,12 +293,10 @@
         <span style="color:var(--text-sub)">Total</span>
         <strong id="pix-amount-display">R$ 0,00</strong>
       </div>
-
       <div id="pix-loading" style="text-align:center;padding:44px 0">
         <div class="spinner"></div>
         <p style="margin-top:16px;color:var(--text-sub);font-size:.88rem">Gerando código PIX…</p>
       </div>
-
       <div id="pix-qr-content" style="display:none;text-align:center">
         <canvas id="pix-qr-canvas"></canvas>
         <div class="pix-code-container">
@@ -250,7 +311,6 @@
           <span>Aguardando confirmação do pagamento…</span>
         </div>
       </div>
-
       <div id="pix-success" class="pix-success" style="display:none">
         <div class="success-icon">✅</div>
         <h3>Pagamento Confirmado</h3>

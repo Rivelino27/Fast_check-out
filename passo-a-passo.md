@@ -1,357 +1,246 @@
-# Passo a Passo — Fast Check-Out Hotel
-Próximos passos essenciais
-Leia o passo-a-passo.md — tem tudo detalhado com comandos exatos
-Crie o projeto Firebase e copie o firebaseConfig para js/config.js
-Crie conta Mercado Pago (usa login do Mercado Livre) → pegue Access Token e Public Key
-Execute firebase init + firebase deploy
-Configure o webhook do Mercado Pago com a URL das suas Functions
-Sobre os custos (resposta à sua pergunta)
-Firebase: plano Blaze necessário para Functions (mas as primeiras 2 milhões de chamadas/mês são grátis)
-Mercado Pago: setup gratuito, paga só por transação — PIX ~0,99%, cartão ~2,99-4,99% — sem mensalidade
+# Fast Check-Out Hotel — Guia Completo de Configuração
 
-npm install -g firebase-tools
-firebase login
-firebase init
-firebase deploy
+## 1. Pré-requisitos
 
-## Visão Geral do Sistema
-
-- **Frontend**: HTML + CSS (neon/glassmorphism) + JavaScript vanilla
-- **Backend**: Firebase (Firestore, Auth, Storage, Functions, Hosting)
-- **Pagamentos**: Mercado Pago (PIX com QR Code + Cartão/Google Pay)
-- **Tempo real**: Firestore `onSnapshot` — sem reload de página
+- Node.js 18+ instalado
+- Firebase CLI: `npm install -g firebase-tools`
+- Conta no [Firebase](https://console.firebase.google.com)
+- Conta no [Mercado Pago](https://www.mercadopago.com.br) (use login do Mercado Livre)
 
 ---
 
-## Serviços Firebase Necessários
+## 2. Configuração do Firebase
 
-| Serviço | Função |
-|---|---|
-| **Firestore** | Banco de dados em tempo real (quartos, pagamentos, notificações, checkouts) |
-| **Authentication** | Login dos administradores (email/senha) |
-| **Storage** | Upload dos arquivos Excel (opcional — o parse é feito no browser) |
-| **Functions** | Integração com Mercado Pago (PIX + cartão) — mantém credenciais seguras |
-| **Hosting** | Publicar o site com HTTPS (obrigatório para webhooks e Google Pay) |
-
----
-
-## PASSO 1 — Criar Projeto no Firebase
+### 2.1 Criar o Projeto
 
 1. Acesse [console.firebase.google.com](https://console.firebase.google.com)
-2. Clique em **"Adicionar projeto"**
-3. Nome sugerido: `fast-checkout-hotel`
-4. Desative o Google Analytics (opcional)
-5. Clique em **Criar projeto**
+2. **Adicionar projeto** → Nome: `fast-checkout-hotel` → Criar
+
+### 2.2 Ativar Authentication
+
+1. **Authentication** → **Começar**
+2. Aba **Sign-in method** → habilitar **E-mail/senha**
+
+### 2.3 Configurar Firestore
+
+1. **Firestore Database** → **Criar banco de dados**
+2. **Modo de produção** → Localização: `southamerica-east1` (São Paulo)
+
+### 2.4 Configurar Storage
+
+1. **Storage** → **Começar** → Localização: `southamerica-east1`
+
+### 2.5 Obter credenciais do app web
+
+1. **Visão geral** → ícone `</>` (Web) → Registrar app
+2. Copie o objeto `firebaseConfig` e cole em `public/js/config.js`
 
 ---
 
-## PASSO 2 — Adicionar Aplicativo Web
+## 3. Criar Usuário Administrador
 
-1. No painel do projeto, clique no ícone **`</>`** (Web)
-2. Nome do app: `fast-checkout-web`
-3. Marque **"Também configurar Firebase Hosting"**
-4. Clique em **Registrar app**
-5. Copie o objeto `firebaseConfig` — você vai colar em `js/config.js`
+### 3.1 Criar usuário
 
----
+1. **Authentication** → **Users** → **Adicionar usuário**
+2. Informe e-mail e senha → **Copie o UID** gerado
 
-## PASSO 3 — Ativar os Serviços
+### 3.2 Criar documento na coleção /admins
 
-### 3.1 Firestore Database
-1. Menu lateral → **Firestore Database**
-2. Clique **"Criar banco de dados"**
-3. Selecione **"Iniciar no modo de produção"**
-4. Escolha a região: **`southamerica-east1`** (São Paulo — menor latência no Brasil)
-5. Clique em **Ativar**
+1. **Firestore** → **Iniciar coleção** → Nome: `admins`
+2. **Document ID** = o UID copiado
+3. Campo: `email` (string) = e-mail do admin
 
-### 3.2 Authentication
-1. Menu lateral → **Authentication**
-2. Clique **"Começar"**
-3. Na aba **"Sign-in method"**, habilite **"E-mail/senha"**
-4. Clique em **Salvar**
+### 3.3 Super Admin (gerencia produtos)
 
-### 3.3 Storage
-1. Menu lateral → **Storage**
-2. Clique **"Começar"**
-3. Inicie no modo de produção
-4. Região: `southamerica-east1`
+Para um admin ter acesso ao CRUD de produtos, abra o documento em `admins/{uid}` e adicione:
 
-### 3.4 Functions
-1. Menu lateral → **Functions**
-2. Clique **"Começar"** (requer plano Blaze — pago por uso)
-3. O plano gratuito tem limite; para produção, o Blaze é necessário
+- Campo: `superAdmin` (boolean) = `true`
 
-> **Custo estimado Functions**: primeiras 2 milhões de invocações/mês são grátis no plano Blaze.
+Admins sem `superAdmin: true` veem os produtos mas não editam.
 
 ---
 
-## PASSO 4 — Firebase CLI (Linha de Comando)
+## 4. Configuração do Mercado Pago
 
-### Instalar o Firebase CLI
-```bash
-npm install -g firebase-tools
-```
+### 4.1 Criar aplicativo
 
-### Login
+1. Acesse [mercadopago.com.br](https://www.mercadopago.com.br) → login
+2. Menu: **Seu negócio** → **Configurações** → **Suas integrações**
+3. **Criar aplicativo** → Nome: `Fast Check-Out Hotel`
+4. Marque **CheckoutPro** e **Pagamentos transparentes** → Salvar
+
+### 4.2 Obter credenciais de produção (PIX e Cartão)
+
+Na página do aplicativo → **Credenciais de produção**:
+
+| Chave | Onde usar |
+|-------|-----------|
+| **Public Key** (`APP_USR-...`) | `public/js/config.js` (front-end) |
+| **Access Token** (`APP_USR-...`) | Firebase Functions config (back-end) |
+
+> ⚠️ Nunca coloque o Access Token no código front-end.
+
+### 4.3 Credenciais de teste (Sandbox)
+
+Para testes sem cobranças reais, use **Credenciais de teste** (mesma tela).
+
+---
+
+## 5. Configurar credenciais no Firebase Functions
+
+### 5.1 Login e seleção do projeto
+
 ```bash
 firebase login
+firebase use fast-checkout-hotel
 ```
 
-### Inicializar o projeto (na pasta do site)
+### 5.2 Definir variáveis de ambiente
+
 ```bash
-cd "e:\DOCS\LINGUAGENS\sites html e css\Fast_check-out"
-firebase init
+firebase functions:config:set \
+  mercadopago.access_token="APP_USR-SEU-ACCESS-TOKEN" \
+  mercadopago.public_key="APP_USR-SUA-PUBLIC-KEY" \
+  app.site_url="https://fast-checkout-hotel.web.app"
 ```
 
-Selecione com `Espaço`:
-- ✅ Firestore
-- ✅ Functions
-- ✅ Hosting
-- ✅ Storage
+Para **testes (sandbox)**:
+```bash
+firebase functions:config:set \
+  mercadopago.access_token="TEST-SEU-TOKEN-TESTE" \
+  mercadopago.public_key="TEST-SUA-PUBLIC-KEY-TESTE" \
+  app.site_url="https://fast-checkout-hotel.web.app"
+```
 
-Configurações sugeridas:
-- Project: selecione o projeto criado
-- Firestore Rules: `firestore.rules`
-- Firestore Indexes: `firestore.indexes.json`
-- Functions language: **JavaScript**
-- Use ESLint: **N**
-- Install dependencies: **Y**
-- Hosting public dir: **`.`** (ponto — raiz do projeto)
-- Single-page app: **Y**
-- Storage rules: `storage.rules`
+### 5.3 Atualizar config.js
+
+Em `public/js/config.js`:
+```javascript
+const MERCADO_PAGO_PUBLIC_KEY = "APP_USR-SUA-PUBLIC-KEY";
+```
 
 ---
 
-## PASSO 5 — Mercado Pago
-
-### 5.1 Criar conta / usar conta existente
-- Acesse [mercadopago.com.br](https://www.mercadopago.com.br)
-- Se já tem conta no Mercado Livre, pode usar o mesmo login
-- Na conta Mercado Pago, acesse **Seu negócio → Configurações**
-
-### 5.2 Obter credenciais
-1. Acesse: [mercadopago.com.br/settings/account/credentials](https://www.mercadopago.com.br/settings/account/credentials)
-2. Copie:
-   - **`Access Token`** de produção (começa com `APP_USR-...`)
-   - **`Public Key`** de produção (começa com `APP_USR-...`)
-3. Para testes, use as credenciais de **Sandbox/Teste**
-
-### 5.3 Taxas do Mercado Pago (gratuito pra configurar)
-| Método | Taxa por transação |
-|---|---|
-| PIX | ~0,99% |
-| Cartão de crédito | ~2,99% a 4,99% |
-| Google Pay | ~2,99% |
-> Não há mensalidade. Você paga apenas quando recebe.
-
-### 5.4 Configurar webhook no Mercado Pago
-1. Acesse [mercadopago.com.br/developers/pt/docs/notifications](https://www.mercadopago.com.br/developers/pt/docs/notifications)
-2. Após o deploy das Functions, você terá uma URL tipo:
-   `https://us-central1-SEU_PROJETO.cloudfunctions.net/mercadoPagoWebhook`
-3. Cadastre essa URL no painel do Mercado Pago em **Notificações → Webhooks**
-4. Selecione o evento: **`payment`**
-
----
-
-## PASSO 6 — Configurar Credenciais nas Functions
-
-Após o `firebase init`, dentro da pasta `functions/`:
+## 6. Deploy
 
 ```bash
+# Instalar dependências das Functions
 cd functions
 npm install
-```
+cd ..
 
-Defina as variáveis de ambiente (credenciais ficam seguras no servidor):
-```bash
-firebase functions:config:set mercadopago.access_token="SEU_ACCESS_TOKEN_AQUI"
-firebase functions:config:set mercadopago.public_key="SUA_PUBLIC_KEY_AQUI"
-firebase functions:config:set app.site_url="https://SEU_PROJETO.web.app"
-```
-
----
-
-## PASSO 7 — Deploy das Regras Firestore
-
-O arquivo `firestore.rules` já está configurado. Para aplicar:
-```bash
-firebase deploy --only firestore:rules
-```
-
-### Estrutura das Regras:
-```
-/rooms        → leitura pública | escrita só admin
-/payments     → leitura pública | criação pública | update só Functions
-/checkouts    → leitura pública | criação pública | update só admin
-/notifications → leitura só admin | criação pública/Functions
-/admins       → leitura só admin | escrita nunca (só console)
-```
-
----
-
-## PASSO 8 — Criar Primeiro Admin
-
-1. No Firebase Console → **Authentication** → **Usuários**
-2. Clique **"Adicionar usuário"**
-3. Preencha e-mail e senha do administrador
-4. Copie o **UID** gerado (coluna "User UID")
-5. Vá em **Firestore** → **Iniciar coleção** → nome: `admins`
-6. ID do documento: **cole o UID** do usuário
-7. Adicione os campos:
-   - `email` (string): `admin@seuhotel.com`
-   - `name` (string): `Administrador`
-   - `createdAt` (timestamp): (clique em "timestamp" e selecione data atual)
-
-> Para adicionar mais admins, repita o processo com outros usuários.
-
----
-
-## PASSO 9 — Configurar o `js/config.js`
-
-Abra o arquivo `js/config.js` e substitua os valores com os do seu projeto Firebase e Mercado Pago:
-
-```javascript
-const firebaseConfig = {
-  apiKey: "AIza...",
-  authDomain: "fast-checkout-hotel.firebaseapp.com",
-  projectId: "fast-checkout-hotel",
-  storageBucket: "fast-checkout-hotel.appspot.com",
-  messagingSenderId: "123456789",
-  appId: "1:123456789:web:abc123"
-};
-
-const MERCADO_PAGO_PUBLIC_KEY = "APP_USR-sua-public-key-aqui";
-```
-
----
-
-## PASSO 10 — Deploy Final
-
-```bash
-# Da pasta raiz do projeto
+# Deploy completo
 firebase deploy
 ```
 
-Isso vai:
-1. Fazer deploy das Cloud Functions (Mercado Pago)
-2. Publicar as regras Firestore e Storage
-3. Publicar o site no Firebase Hosting
-
-Acesse seu site em: `https://SEU_PROJETO.web.app`
-
----
-
-## Estrutura do Excel para Upload
-
-| RSV | NOME | QUARTO | SALDO | DEBITAR | FATURAR |
-|---|---|---|---|---|---|
-| 10234 | João Silva | 101 | 150.00 | Sim | Não |
-| 10235 | Maria Santos | 102 | 0.00 | Sim | Sim |
-| 10236 | Pedro Costa | 103 | 80.50 | Não | Sim |
-
-> **Observações:**
-> - A primeira linha deve ser o cabeçalho (nome das colunas)
-> - Colunas aceitam: `Sim`/`Não`, `sim`/`não`, `S`/`N`, `true`/`false`, `1`/`0`
-> - Saldo em reais (use ponto ou vírgula como decimal)
-> - Quartos já existentes serão **atualizados**, novos serão **criados**
-
----
-
-## Índices Firestore
-
-O arquivo `firestore.indexes.json` cria os índices necessários para:
-- Busca de quartos ativos por número
-- Listagem de checkouts por horário
-- Notificações não lidas por data
-
-Para criar os índices:
-```bash
-firebase deploy --only firestore:indexes
+Após o deploy, anote a URL do webhook que aparece no terminal:
+```
+https://us-central1-fast-checkout-hotel.cloudfunctions.net/mercadoPagoWebhook
 ```
 
 ---
 
-## Estrutura de Coleções Firestore
+## 7. Configurar Webhook do Mercado Pago
+
+O webhook é essencial — é ele que confirma automaticamente o PIX ao sistema.
+
+### 7.1 Configurar no painel do MP
+
+1. **Mercadopago.com.br** → Menu: **Configurações** → **Notificações** → **Webhooks**
+2. **Configurar notificações**
+3. URL de produção:
+   ```
+   https://us-central1-fast-checkout-hotel.cloudfunctions.net/mercadoPagoWebhook
+   ```
+4. Evento: ✅ **Pagamentos** (`payment`)
+5. Salvar
+
+### 7.2 Testar
+
+Use **Simular evento** no painel do MP para validar que o webhook responde com HTTP 200.
+
+---
+
+## 8. Testar Pagamentos
+
+### 8.1 PIX — Sandbox
+
+Com credenciais de teste, o QR Code gerado é fictício. Para simular uma confirmação:
+1. No painel do MP → **Atividade** → encontre o pagamento de teste
+2. Use **Simular evento de pagamento** → status `approved`
+
+### 8.2 Cartão de Crédito — Cartões de teste
+
+| Bandeira | Número              | CVV | Validade |
+|----------|---------------------|-----|----------|
+| Visa     | 4235 6477 2802 5682 | 123 | 11/25    |
+| Mastercard | 5031 4332 1540 6351 | 123 | 11/25  |
+| Amex     | 3753 651535 56885   | 123 | 1234     |
+
+- **CPF**: 12345678909
+- **Nome no cartão**: `APRO` (aprova automaticamente)
+
+---
+
+## 9. Cadastrar Produtos (Super Admin)
+
+1. Faça login no site com conta super admin
+2. **Dashboard → Produtos → + Novo Produto**
+3. Preencha nome, descrição, preço
+4. Faça upload de imagem (até 2MB) ou cole uma URL
+5. Marque **Produto disponível** → Salvar
+
+Hóspedes verão o catálogo ao consultar seu quarto e poderão adicionar itens ao carrinho.
+
+---
+
+## 10. Fluxo Completo
 
 ```
-/rooms/{roomId}
-  rsv: string
-  guestName: string
-  roomNumber: string
-  balance: number
-  debit: boolean
-  invoice: boolean
-  status: "active" | "checked-out"
-  checkoutTime: timestamp | null
-  uploadedAt: timestamp
-  updatedAt: timestamp
+[ADMIN] Upload Excel com reservas
+    → Quartos criados no Firestore em tempo real
 
-/checkouts/{checkoutId}
-  roomId: string
-  rsv: string
-  roomNumber: string
-  guestName: string
-  finalBalance: number
-  checkoutTime: timestamp
-  checkedOutBy: "guest" | "admin"
-  adminUid: string | null
+[HÓSPEDE no mobile] Consulta nome + quarto
+    → Vê saldo devedor e catálogo de produtos
+    → Adiciona itens ao carrinho
+    → Paga via PIX (QR Code) ou Cartão/Google Pay
+        → Webhook MP notifica o servidor
+        → App detecta via onSnapshot (sem reload)
+        → Saldo zerado automaticamente
+    → Hóspede realiza check-out
 
-/payments/{paymentId}
-  roomId: string
-  roomNumber: string
-  guestName: string
-  amount: number
-  items: array[{name, price}]
-  method: "pix" | "credit_card"
-  status: "pending" | "approved" | "rejected"
-  mercadoPagoId: string
-  pixCode: string
-  pixCodeBase64: string
-  preferenceId: string
-  createdAt: timestamp
-  updatedAt: timestamp
-
-/notifications/{notificationId}
-  type: "checkout" | "payment"
-  message: string
-  roomNumber: string
-  roomId: string
-  amount: number | null
-  method: string | null
-  read: boolean
-  createdAt: timestamp
-
-/admins/{uid}
-  email: string
-  name: string
-  createdAt: timestamp
+[ADMIN] Recebe notificação em tempo real (sem reload)
+    → Vê check-out na lista filtrada
 ```
 
 ---
 
-## Testar Pagamento PIX em Sandbox
+## 11. Coleções do Firestore
 
-1. No Mercado Pago, use credenciais de **teste** no `config.js`
-2. Gere um QR Code de teste
-3. Use o app **Mercado Pago Sandbox** ou simule o pagamento via API:
-```bash
-curl -X POST "https://api.mercadopago.com/v1/payments/TEST_PAYMENT_ID/simulate_payment" \
-  -H "Authorization: Bearer TEST_ACCESS_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"status": "approved"}'
-```
+| Coleção | Descrição |
+|---------|-----------|
+| `/admins/{uid}` | Admins. `superAdmin: true` = acesso ao CRUD de produtos |
+| `/rooms/{id}` | Reservas importadas via Excel |
+| `/products/{id}` | Cardápio de produtos gerenciados pelo super admin |
+| `/payments/{id}` | Pagamentos PIX e cartão |
+| `/checkouts/{id}` | Histórico de check-outs |
+| `/notifications/{id}` | Notificações em tempo real para admins |
 
 ---
 
-## Checklist Final antes de ir para Produção
+## 12. Dúvidas frequentes
 
-- [ ] `js/config.js` com credenciais Firebase de produção
-- [ ] Credenciais Mercado Pago de **produção** nas Functions config
-- [ ] Webhook Mercado Pago apontando para a URL das Functions
-- [ ] Pelo menos 1 admin criado no Firebase Auth + Firestore
-- [ ] `firebase deploy` executado com sucesso
-- [ ] Site acessível via HTTPS (`https://SEU_PROJETO.web.app`)
-- [ ] Testar busca de quarto como hóspede
-- [ ] Testar upload de Excel como admin
-- [ ] Testar geração de PIX
-- [ ] Testar checkout e notificação em tempo real
+**"Usuário não é administrador"**
+→ O documento `/admins/{uid}` não existe ou o UID está errado. Verifique no Firebase Console.
+
+**PIX não confirma automaticamente**
+→ Verifique se o webhook está configurado. Use Access Token de produção, não teste.
+
+**Erro ao fazer deploy**
+→ Execute `cd functions && npm install` antes de `firebase deploy`.
+
+**Como adicionar mais admins?**
+→ Crie o usuário em Authentication, copie o UID e crie o documento em `/admins/{uid}`.
+
+**Como mudar o nome do hotel?**
+→ Edite `public/index.html`, elemento com `class="nav-logo-text"`.

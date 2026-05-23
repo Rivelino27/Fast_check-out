@@ -5,6 +5,11 @@ cd functions
 npm install
 Deploy everything:
 
+Fill in the Mercado Pago credentials (if not done yet):
+
+
+firebase functions:config:set mercadopago.access_token="APP_USR-..." mercadopago.public_key="APP_USR-..." app.site_url="https://fast-checkout-hotel.web.app"
+firebase deploy --only functions
 
 firebase deploy
 

@@ -7,33 +7,45 @@ service cloud.firestore {
         exists(/databases/$(database)/documents/admins/$(request.auth.uid));
     }
 
+    function isSuperAdmin() {
+      return request.auth != null &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.get('superAdmin', false) == true;
+    }
+
     // Quartos: leitura pública, escrita somente admin
     match /rooms/{roomId} {
       allow read: if true;
       allow write: if isAdmin();
     }
 
-    // Pagamentos: leitura pública, criação pública, update somente via Functions (Admin SDK)
+    // Produtos: leitura pública, escrita somente super admin
+    match /products/{productId} {
+      allow read: if true;
+      allow create, update, delete: if isSuperAdmin();
+    }
+
+    // Pagamentos: leitura pública, criação pública, update somente admin/Functions
     match /payments/{paymentId} {
       allow read: if true;
       allow create: if true;
       allow update, delete: if isAdmin();
     }
 
-    // Checkouts: leitura pública, criação pública (hóspede faz checkout), update somente admin
+    // Checkouts: leitura pública, criação pública (hóspede), update somente admin
     match /checkouts/{checkoutId} {
       allow read: if true;
       allow create: if true;
       allow update, delete: if isAdmin();
     }
 
-    // Notificações: somente admin lê e atualiza, criação pública (hóspede + Functions)
+    // Notificações: somente admin lê/atualiza, criação pública
     match /notifications/{notificationId} {
       allow read, update, delete: if isAdmin();
       allow create: if true;
     }
 
-    // Admins: somente admin pode ler a própria lista, escrita somente via console/Functions
+    // Admins: somente admin lê, escrita somente via console/Functions
     match /admins/{userId} {
       allow read: if isAdmin();
       allow write: if false;
