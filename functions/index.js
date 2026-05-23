@@ -1,101 +1,99 @@
 'use strict';
 
 const functions = require('firebase-functions');
-const admin = require('firebase-admin');
+const admin     = require('firebase-admin');
 const { MercadoPagoConfig, Payment, Preference } = require('mercadopago');
 
 admin.initializeApp();
 const db = admin.firestore();
 
+const PROJECT     = process.env.GCLOUD_PROJECT || 'fast-checkout-hotel';
+const SITE_URL    = process.env.SITE_URL    || 'https://fast-checkout-hotel.web.app';
+const WEBHOOK_URL = `https://us-central1-${PROJECT}.cloudfunctions.net/mercadoPagoWebhook`;
+
 function getMPClient() {
-  const accessToken = functions.config().mercadopago.access_token;
-  return new MercadoPagoConfig({ accessToken, options: { timeout: 5000 } });
+  const accessToken = process.env.MP_ACCESS_TOKEN;
+  if (!accessToken) throw new Error('MP_ACCESS_TOKEN não configurado');
+  return new MercadoPagoConfig({ accessToken, options: { timeout: 8000 } });
 }
 
-function getWebhookUrl(req) {
-  return `https://${req ? req.hostname : 'us-central1-SEU-PROJETO.cloudfunctions.net'}/mercadoPagoWebhook`;
-}
+// ─── PIX ─────────────────────────────────────────────────────────────────────
+exports.createPixPayment = functions.https.onCall(async (request) => {
+  const { amount, roomId, guestName, roomNumber, rsv, items } = request.data;
 
-// ─── Criar pagamento PIX ──────────────────────────────────────────────────────
-exports.createPixPayment = functions.https.onCall(async (data, context) => {
-  const { amount, roomId, guestName, roomNumber, items } = data;
-
-  if (!amount || amount <= 0) throw new functions.https.HttpsError('invalid-argument', 'Valor inválido');
+  const amountNum = parseFloat(Number(amount).toFixed(2));
+  if (!isFinite(amountNum) || amountNum <= 0) {
+    throw new functions.https.HttpsError('invalid-argument', 'Valor inválido');
+  }
   if (!roomId) throw new functions.https.HttpsError('invalid-argument', 'roomId obrigatório');
 
-  const client = getMPClient();
+  const client        = getMPClient();
   const paymentClient = new Payment(client);
-
-  const siteUrl = functions.config().app?.site_url || 'https://fast-checkout-hotel.web.app';
 
   const response = await paymentClient.create({
     body: {
-      transaction_amount: Number(amount.toFixed(2)),
-      description: `Hotel Checkout — Quarto ${roomNumber} — ${guestName}`,
-      payment_method_id: 'pix',
-      payer: { email: 'hospede@hotel.com.br' },
-      notification_url: `${siteUrl.replace('web.app', 'cloudfunctions.net').replace('https://', 'https://us-central1-')}/mercadoPagoWebhook`,
-      metadata: { roomId, roomNumber, guestName },
+      transaction_amount: amountNum,
+      description:        `Hotel Checkout — Quarto ${roomNumber} — ${guestName}`,
+      payment_method_id:  'pix',
+      payer:              { email: 'hospede@hotel.com.br' },
+      notification_url:   WEBHOOK_URL,
+      metadata:           { roomId, roomNumber, guestName },
       statement_descriptor: 'HOTEL CHECKOUT',
     },
   });
 
-  const pixCode = response.point_of_interaction?.transaction_data?.qr_code || '';
-  const pixBase64 = response.point_of_interaction?.transaction_data?.qr_code_base64 || '';
+  const pixCode       = response.point_of_interaction?.transaction_data?.qr_code        || '';
+  const pixCodeBase64 = response.point_of_interaction?.transaction_data?.qr_code_base64 || '';
 
   const paymentRef = await db.collection('payments').add({
     roomId,
     roomNumber,
     guestName,
-    amount,
-    items: items || [],
-    method: 'pix',
-    status: 'pending',
+    rsv:          rsv || '',
+    amount:       amountNum,
+    items:        items || [],
+    method:       'pix',
+    status:       'pending',
     mercadoPagoId: String(response.id),
     pixCode,
-    pixCodeBase64: pixBase64,
+    pixCodeBase64,
     preferenceId: '',
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    createdAt:    admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt:    admin.firestore.FieldValue.serverTimestamp(),
   });
 
-  return {
-    paymentId: paymentRef.id,
-    mercadoPagoId: String(response.id),
-    pixCode,
-    pixCodeBase64: pixBase64,
-  };
+  return { paymentId: paymentRef.id, mercadoPagoId: String(response.id), pixCode, pixCodeBase64 };
 });
 
-// ─── Criar preferência para cartão / Google Pay (Checkout Pro) ───────────────
-exports.createCardPreference = functions.https.onCall(async (data, context) => {
-  const { amount, roomId, guestName, roomNumber, items } = data;
+// ─── Cartão / Google Pay (Checkout Pro) ──────────────────────────────────────
+exports.createCardPreference = functions.https.onCall(async (request) => {
+  const { amount, roomId, guestName, roomNumber, rsv, items } = request.data;
 
-  if (!amount || amount <= 0) throw new functions.https.HttpsError('invalid-argument', 'Valor inválido');
+  const amountNum = parseFloat(Number(amount).toFixed(2));
+  if (!isFinite(amountNum) || amountNum <= 0) {
+    throw new functions.https.HttpsError('invalid-argument', 'Valor inválido');
+  }
 
-  const client = getMPClient();
-  const preferenceClient = new Preference(client);
-
-  const siteUrl = functions.config().app?.site_url || 'https://fast-checkout-hotel.web.app';
-  const webhookUrl = `${siteUrl.replace('web.app', 'cloudfunctions.net').replace('https://', 'https://us-central1-')}/mercadoPagoWebhook`;
+  const client            = getMPClient();
+  const preferenceClient  = new Preference(client);
 
   const preferenceItems = items && items.length > 0
     ? items.map(i => ({ title: i.name, quantity: 1, unit_price: Number(i.price), currency_id: 'BRL' }))
-    : [{ title: `Hotel Checkout — Quarto ${roomNumber}`, quantity: 1, unit_price: Number(amount.toFixed(2)), currency_id: 'BRL' }];
+    : [{ title: `Hotel Checkout — Quarto ${roomNumber}`, quantity: 1, unit_price: amountNum, currency_id: 'BRL' }];
 
   const response = await preferenceClient.create({
     body: {
       items: preferenceItems,
       payer: { name: guestName },
       back_urls: {
-        success: `${siteUrl}?payment=success&roomId=${roomId}`,
-        failure: `${siteUrl}?payment=failure&roomId=${roomId}`,
-        pending: `${siteUrl}?payment=pending&roomId=${roomId}`,
+        success: `${SITE_URL}?payment=success&roomId=${roomId}`,
+        failure: `${SITE_URL}?payment=failure&roomId=${roomId}`,
+        pending: `${SITE_URL}?payment=pending&roomId=${roomId}`,
       },
-      auto_return: 'approved',
-      notification_url: webhookUrl,
+      auto_return:          'approved',
+      notification_url:     WEBHOOK_URL,
       statement_descriptor: 'HOTEL CHECKOUT',
-      metadata: { roomId, roomNumber, guestName },
+      metadata:             { roomId, roomNumber, guestName },
     },
   });
 
@@ -103,24 +101,25 @@ exports.createCardPreference = functions.https.onCall(async (data, context) => {
     roomId,
     roomNumber,
     guestName,
-    amount,
-    items: items || [],
-    method: 'credit_card',
-    status: 'pending',
+    rsv:          rsv || '',
+    amount:       amountNum,
+    items:        items || [],
+    method:       'credit_card',
+    status:       'pending',
     mercadoPagoId: '',
-    pixCode: '',
+    pixCode:      '',
     pixCodeBase64: '',
-    preferenceId: response.id,
-    initPoint: response.init_point,
+    preferenceId:  response.id,
+    initPoint:     response.init_point,
     sandboxInitPoint: response.sandbox_init_point,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
 
   return {
-    paymentId: paymentRef.id,
-    preferenceId: response.id,
-    initPoint: response.init_point,
+    paymentId:       paymentRef.id,
+    preferenceId:    response.id,
+    initPoint:       response.init_point,
     sandboxInitPoint: response.sandbox_init_point,
   };
 });
@@ -135,9 +134,9 @@ exports.mercadoPagoWebhook = functions.https.onRequest(async (req, res) => {
       return;
     }
 
-    const client = getMPClient();
+    const client        = getMPClient();
     const paymentClient = new Payment(client);
-    const mpPayment = await paymentClient.get({ id: data.id });
+    const mpPayment     = await paymentClient.get({ id: data.id });
 
     if (mpPayment.status !== 'approved') {
       res.sendStatus(200);
@@ -145,9 +144,8 @@ exports.mercadoPagoWebhook = functions.https.onRequest(async (req, res) => {
     }
 
     const mercadoPagoId = String(mpPayment.id);
-    const roomId = mpPayment.metadata?.room_id || mpPayment.metadata?.roomId;
+    const roomId        = mpPayment.metadata?.room_id || mpPayment.metadata?.roomId;
 
-    // Buscar pagamento no Firestore pelo mercadoPagoId ou preferenceId
     let paymentDoc = null;
 
     const byMPId = await db.collection('payments')
@@ -163,37 +161,30 @@ exports.mercadoPagoWebhook = functions.https.onRequest(async (req, res) => {
       if (!byRoom.empty) paymentDoc = byRoom.docs[0];
     }
 
-    if (!paymentDoc) {
-      res.sendStatus(200);
-      return;
-    }
+    if (!paymentDoc) { res.sendStatus(200); return; }
 
     const paymentData = paymentDoc.data();
 
-    // Atualiza pagamento como aprovado
     await paymentDoc.ref.update({
       status: 'approved',
       mercadoPagoId,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
-    // Zera o saldo do quarto
-    const roomRef = db.collection('rooms').doc(paymentData.roomId);
-    await roomRef.update({
-      balance: 0,
+    await db.collection('rooms').doc(paymentData.roomId).update({
+      balance:   0,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
-    // Notifica os admins
     await db.collection('notifications').add({
-      type: 'payment',
-      message: `✅ Pagamento confirmado — Quarto ${paymentData.roomNumber} — ${paymentData.guestName} — R$ ${Number(paymentData.amount).toFixed(2)}`,
+      type:    'payment',
+      message: `💰 Pagamento confirmado — Quarto ${paymentData.roomNumber} — ${paymentData.guestName} — R$ ${Number(paymentData.amount).toFixed(2)}`,
       roomNumber: paymentData.roomNumber,
-      roomId: paymentData.roomId,
-      amount: paymentData.amount,
-      method: paymentData.method,
-      read: false,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      roomId:     paymentData.roomId,
+      amount:     paymentData.amount,
+      method:     paymentData.method,
+      read:       false,
+      createdAt:  admin.firestore.FieldValue.serverTimestamp(),
     });
 
     res.sendStatus(200);
@@ -203,54 +194,76 @@ exports.mercadoPagoWebhook = functions.https.onRequest(async (req, res) => {
   }
 });
 
-// ─── Fazer checkout (pode ser chamado pelo admin) ─────────────────────────────
-exports.adminCheckoutRoom = functions.https.onCall(async (data, context) => {
-  if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Login necessário');
-
-  const adminDoc = await db.collection('admins').doc(context.auth.uid).get();
-  if (!adminDoc.exists) throw new functions.https.HttpsError('permission-denied', 'Não é admin');
-
-  const { roomId } = data;
+// ─── Guest checkout (sem auth, validado no servidor) ─────────────────────────
+exports.guestCheckoutRoom = functions.https.onCall(async (request) => {
+  const { roomId } = request.data;
   if (!roomId) throw new functions.https.HttpsError('invalid-argument', 'roomId obrigatório');
 
   const roomRef = db.collection('rooms').doc(roomId);
-  const room = await roomRef.get();
+  const roomDoc = await roomRef.get();
+
+  if (!roomDoc.exists) {
+    throw new functions.https.HttpsError('not-found', 'Quarto não encontrado');
+  }
+  const roomData = roomDoc.data();
+  if (roomData.status !== 'active') {
+    throw new functions.https.HttpsError('failed-precondition', 'Check-out já realizado. Recarregue a página.');
+  }
+  if ((roomData.balance || 0) > 0) {
+    throw new functions.https.HttpsError('failed-precondition', 'Saldo pendente. Realize o pagamento primeiro.');
+  }
+
+  const now    = admin.firestore.FieldValue.serverTimestamp();
+  const coData = {
+    roomId, rsv: roomData.rsv || '', roomNumber: roomData.roomNumber,
+    guestName: roomData.guestName, finalBalance: roomData.balance || 0,
+    checkoutTime: now, checkedOutBy: 'guest', adminUid: null,
+  };
+  const batch = db.batch();
+  batch.update(roomRef, { status: 'checked-out', checkoutTime: now, updatedAt: now });
+  batch.set(db.collection('checkouts').doc(),       coData);
+  batch.set(db.collection('checkoutHistory').doc(), coData);
+  batch.set(db.collection('notifications').doc(), {
+    type: 'checkout',
+    message: `🏨 Check-out — Quarto ${roomData.roomNumber} — ${roomData.guestName}`,
+    roomNumber: roomData.roomNumber, roomId,
+    amount: null, method: null, read: false, createdAt: now,
+  });
+  await batch.commit();
+  return { success: true };
+});
+
+// ─── Admin checkout ───────────────────────────────────────────────────────────
+exports.adminCheckoutRoom = functions.https.onCall(async (request) => {
+  if (!request.auth) throw new functions.https.HttpsError('unauthenticated', 'Login necessário');
+
+  const adminDoc = await db.collection('admins').doc(request.auth.uid).get();
+  if (!adminDoc.exists) throw new functions.https.HttpsError('permission-denied', 'Não é admin');
+
+  const { roomId } = request.data;
+  if (!roomId) throw new functions.https.HttpsError('invalid-argument', 'roomId obrigatório');
+
+  const roomRef = db.collection('rooms').doc(roomId);
+  const room    = await roomRef.get();
   if (!room.exists) throw new functions.https.HttpsError('not-found', 'Quarto não encontrado');
 
   const roomData = room.data();
-  const now = admin.firestore.FieldValue.serverTimestamp();
-
+  const now      = admin.firestore.FieldValue.serverTimestamp();
+  const coData   = {
+    roomId, rsv: roomData.rsv || '', roomNumber: roomData.roomNumber,
+    guestName: roomData.guestName, finalBalance: roomData.balance || 0,
+    checkoutTime: now, checkedOutBy: 'admin', adminUid: request.auth.uid,
+  };
   const batch = db.batch();
-
-  // Atualiza status do quarto
   batch.update(roomRef, { status: 'checked-out', checkoutTime: now, updatedAt: now });
-
-  // Cria documento de checkout
-  const checkoutRef = db.collection('checkouts').doc();
-  batch.set(checkoutRef, {
-    roomId,
-    rsv: roomData.rsv || '',
-    roomNumber: roomData.roomNumber,
-    guestName: roomData.guestName,
-    finalBalance: roomData.balance || 0,
-    checkoutTime: now,
-    checkedOutBy: 'admin',
-    adminUid: context.auth.uid,
-  });
-
-  // Notificação
-  const notifRef = db.collection('notifications').doc();
-  batch.set(notifRef, {
+  batch.set(db.collection('checkouts').doc(),       coData);
+  batch.set(db.collection('checkoutHistory').doc(), coData);
+  batch.set(db.collection('notifications').doc(), {
     type: 'checkout',
-    message: `🏨 Check-out realizado (admin) — Quarto ${roomData.roomNumber} — ${roomData.guestName}`,
-    roomNumber: roomData.roomNumber,
-    roomId,
-    amount: null,
-    method: null,
-    read: false,
-    createdAt: now,
+    message: `🏨 Check-out (admin) — Quarto ${roomData.roomNumber} — ${roomData.guestName}`,
+    roomNumber: roomData.roomNumber, roomId,
+    amount: null, method: null, read: false, createdAt: now,
   });
-
   await batch.commit();
   return { success: true };
 });

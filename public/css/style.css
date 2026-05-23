@@ -378,6 +378,26 @@ button { cursor: pointer; border: none; outline: none; font-family: inherit; }
   text-align: center; color: var(--text);
 }
 
+/* ── Checkout success banner ─────────────────────────────────── */
+.checkout-success-wrap {
+  max-width: 560px; margin: 0 auto 36px; padding: 56px 28px 48px;
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+  animation: fadeUp .4s ease both;
+}
+.checkout-success-icon { font-size: 3.5rem; margin-bottom: 22px; opacity: .85; }
+.checkout-success-eyebrow {
+  font-size: .7rem; font-weight: 600; letter-spacing: 4px; text-transform: uppercase;
+  color: var(--blue); margin-bottom: 12px;
+}
+.checkout-success-title {
+  font-family: 'Playfair Display', serif; font-size: 2.1rem; font-weight: 700;
+  color: var(--text); margin-bottom: 10px; letter-spacing: -.3px;
+}
+.checkout-success-line {
+  width: 36px; height: 2px; background: var(--blue); border-radius: 2px;
+  margin: 0 auto 20px; box-shadow: 0 0 12px var(--blue-glow);
+}
+
 /* ── Balance card ────────────────────────────────────────────── */
 .balance-card { max-width: 560px; margin: 0 auto 36px; padding: 28px; animation: fadeUp .38s ease both; }
 .room-header {
@@ -655,6 +675,12 @@ td.td-time  { color: var(--text-sub); font-size: .76rem; white-space: nowrap; }
 }
 
 /* ── Upload ──────────────────────────────────────────────────── */
+.last-upload-card {
+  max-width: 640px; margin: 0 auto 16px; padding: 14px 20px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap;
+  font-size: .88rem;
+}
 .upload-card { max-width: 640px; margin: 0 auto; padding: 32px; }
 .upload-card h3 { font-family: 'Playfair Display', serif; font-size: 1.2rem; font-weight: 700; margin-bottom: 8px; }
 .upload-card > p { color: var(--text-sub); font-size: .9rem; margin-bottom: 22px; }

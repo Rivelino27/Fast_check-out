@@ -14,9 +14,13 @@ service cloud.firestore {
     }
 
     // Quartos: leitura pública, escrita somente admin
+    // Hóspede pode fazer check-out quando quarto está ativo com saldo zero
     match /rooms/{roomId} {
       allow read: if true;
       allow write: if isAdmin();
+      allow update: if resource.data.status == 'active'
+                    && resource.data.balance == 0
+                    && request.resource.data.status == 'checked-out';
     }
 
     // Produtos: leitura pública, escrita somente super admin
@@ -39,6 +43,13 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
 
+    // Histórico permanente: admin lê, qualquer um cria, ninguém apaga/edita
+    match /checkoutHistory/{id} {
+      allow read: if isAdmin();
+      allow create: if true;
+      allow update, delete: if false;
+    }
+
     // Notificações: somente admin lê/atualiza, criação pública
     match /notifications/{notificationId} {
       allow read, update, delete: if isAdmin();
@@ -49,6 +60,11 @@ service cloud.firestore {
     match /admins/{userId} {
       allow read: if isAdmin();
       allow write: if false;
+    }
+
+    // Meta (upload info, etc.): somente admin
+    match /meta/{docId} {
+      allow read, write: if isAdmin();
     }
   }
 }

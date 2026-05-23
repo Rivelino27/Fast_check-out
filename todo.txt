@@ -1,0 +1,3 @@
+Sobre configuração do Mercado Pago: a Access Token de produção (APP_USR-...) está correta. Para o PIX funcionar em produção precisa verificar no painel 
+MP se: (1) a conta está com identidade verificada (KYC completo), (2) existe uma chave PIX cadastrada na conta MP, e (3) o webhook está configurado com a 
+URL  https://us-central1-fast-checkout-hotel.cloudfunctions.net/mercadoPagoWebhook com evento "Pagamentos" selecionado.

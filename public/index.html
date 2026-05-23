@@ -40,17 +40,32 @@
       </div>
 
       <!-- Busca -->
-      <div class="guest-search-card surface">
+      <form class="guest-search-card surface" autocomplete="off" onsubmit="return false">
         <h2>Identificação do Hóspede</h2>
         <div class="form-group">
           <label>Nome ou Sobrenome</label>
-          <input type="text" id="guest-name" class="input-neon" placeholder="Digite seu nome…" autocomplete="off">
+          <input type="text" id="guest-name" class="input-neon" placeholder="Digite seu nome…"
+                 autocomplete="off" name="guest_search_name" spellcheck="false">
         </div>
         <div class="form-group">
           <label>Número do Quarto</label>
-          <input type="text" id="guest-room" class="input-neon" placeholder="Ex: 101" autocomplete="off" inputmode="numeric">
+          <input type="text" id="guest-room" class="input-neon" placeholder="Ex: 101"
+                 autocomplete="off" name="guest_search_room" inputmode="numeric" spellcheck="false">
         </div>
-        <button id="btn-search-guest" class="btn-primary">Consultar Saldo</button>
+        <button id="btn-search-guest" class="btn-primary" type="button">Consultar Saldo</button>
+      </form>
+
+      <!-- Check-out success banner -->
+      <div id="checkout-success-banner" style="display:none">
+        <div class="checkout-success-wrap surface led-surface">
+          <div class="checkout-success-icon">🏨</div>
+          <p class="checkout-success-eyebrow">Check-Out Concluído</p>
+          <h2 class="checkout-success-title">Até logo!</h2>
+          <div class="checkout-success-line"></div>
+          <p id="checkout-success-room" style="color:var(--text-sub);font-size:.95rem;margin-bottom:4px"></p>
+          <p style="color:var(--text-sub);font-size:.88rem;margin-bottom:32px">Obrigado pela sua estadia.</p>
+          <button id="btn-new-checkout" class="btn-primary" style="max-width:260px">Novo Check-Out</button>
+        </div>
       </div>
 
       <!-- Resultado -->
@@ -154,6 +169,8 @@
           <button class="tab-btn" data-tab="checkins">Check-Ins</button>
           <button class="tab-btn" data-tab="checkouts">Check-Outs</button>
           <button class="tab-btn" data-tab="products">Produtos</button>
+          <button class="tab-btn" data-tab="payments">Pagamentos</button>
+          <button class="tab-btn" data-tab="history">Histórico</button>
           <button class="tab-btn" data-tab="upload">Upload</button>
         </div>
       </div>
@@ -182,6 +199,7 @@
           <input type="text" id="filter-room" class="input-neon input-sm" placeholder="Filtrar por quarto…">
           <input type="datetime-local" id="filter-date" class="input-neon input-sm">
           <button id="btn-export-excel" class="btn-secondary">Exportar Excel</button>
+          <button id="btn-clear-day" class="btn-danger btn-sm">🗑 Limpar Dados do Dia</button>
         </div>
         <div id="checkouts-list">
           <div class="empty-state"><div class="empty-state-icon">📋</div><p>Nenhum check-out registrado.</p></div>
@@ -199,11 +217,44 @@
         </div>
       </div>
 
+      <!-- Tab Pagamentos -->
+      <div id="tab-payments" class="tab-content">
+        <div class="checkouts-toolbar">
+          <input type="text" id="filter-payment" class="input-neon input-sm" placeholder="Filtrar por quarto ou hóspede…">
+          <select id="filter-payment-method" class="input-neon input-sm" style="max-width:160px">
+            <option value="">Todos os métodos</option>
+            <option value="pix">PIX</option>
+            <option value="credit_card">Cartão</option>
+          </select>
+        </div>
+        <div id="payments-list">
+          <div class="empty-state"><div class="empty-state-icon">💰</div><p>Nenhum pagamento registrado.</p></div>
+        </div>
+      </div>
+
       <!-- Tab Upload -->
       <div id="tab-upload" class="tab-content">
+      <!-- Tab Histórico -->
+      <div id="tab-history" class="tab-content">
+        <div class="checkouts-toolbar">
+          <input type="text" id="filter-history" class="input-neon input-sm" placeholder="Buscar quarto ou hóspede…">
+          <input type="date" id="filter-history-from" class="input-neon input-sm" title="De:">
+          <input type="date" id="filter-history-to"   class="input-neon input-sm" title="Até:">
+          <button id="btn-export-history" class="btn-secondary">Exportar Excel</button>
+        </div>
+        <div id="history-list">
+          <div class="empty-state"><div class="empty-state-icon">📜</div><p>Nenhum check-out no histórico.</p></div>
+        </div>
+      </div>
+
+        <div id="last-upload-card" class="last-upload-card surface" style="display:none">
+          <div id="last-upload-info" style="font-size:.88rem;color:var(--text-sub)"></div>
+          <button id="btn-undo-upload" class="btn-danger btn-sm">🗑 Remover Quartos</button>
+        </div>
+
         <div class="upload-card surface">
           <h3>Importar Reservas</h3>
-          <p>Importe um arquivo Excel com as reservas. Quartos existentes serão atualizados; novos, criados automaticamente.</p>
+          <p>Importe um arquivo Excel com as reservas. Os quartos anteriores serão removidos e substituídos pelos do novo arquivo. Os comprovantes de pagamento são sempre preservados.</p>
           <div class="upload-format">
             <h4>Colunas esperadas</h4>
             <div class="format-columns">

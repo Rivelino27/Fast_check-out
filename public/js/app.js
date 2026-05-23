@@ -17,11 +17,16 @@ const state = {
   allCheckouts:          [],
   allRooms:              [],
   allProducts:           [],
+  allPayments:           [],
+  allHistory:            [],
   pixUnsubscribe:        null,
   roomsUnsubscribe:      null,
   notifUnsubscribe:      null,
   checkoutsUnsubscribe:  null,
   productsUnsubscribe:   null,
+  paymentsUnsubscribe:   null,
+  historyUnsubscribe:    null,
+  uploadMetaUnsubscribe: null,
 };
 
 // ── Utils ──────────────────────────────────────────────────────────────────
@@ -48,12 +53,21 @@ function showView(id) {
   qsa('.view').forEach(v => v.classList.remove('active'));
   const t = qs(`#${id}`);
   if (t) t.classList.add('active');
-  // FIX: always reset login form when navigating to login view
   if (id === 'admin-login-view') {
     const btn = qs('#btn-login');
     if (btn) { btn.textContent = 'Entrar'; btn.disabled = false; }
     const em = qs('#admin-email');   if (em) em.value = '';
     const pw = qs('#admin-password'); if (pw) pw.value = '';
+  }
+  // Clear guest inputs immediately and again after browser autofill fires
+  if (id === 'guest-view') {
+    const clear = () => {
+      const gn = qs('#guest-name'); if (gn) gn.value = '';
+      const gr = qs('#guest-room'); if (gr) gr.value = '';
+    };
+    clear();
+    setTimeout(clear, 80);
+    setTimeout(clear, 300);
   }
 }
 
@@ -64,6 +78,8 @@ function showTab(id) {
   if (id === 'checkins')  renderCheckins(state.allRooms);
   if (id === 'products')  renderProductsAdmin(state.allProducts);
   if (id === 'checkouts') renderCheckouts(state.allCheckouts);
+  if (id === 'payments')  renderPayments(state.allPayments);
+  if (id === 'history')   renderHistory(state.allHistory);
 }
 
 // ── Auth ───────────────────────────────────────────────────────────────────
@@ -182,33 +198,38 @@ function refreshGuestUI(balance) {
   const cartTotal  = state.cart.reduce((s, i) => s + i.price, 0);
   const grandTotal = balance + cartTotal;
 
-  // Cart section
+  // Cart section — null-guard in case old HTML cached without #cart-items-list
   const cartSection = qs('#cart-items-section');
   const cartList    = qs('#cart-items-list');
-  if (state.cart.length > 0) {
-    cartSection.style.display = '';
-    cartList.innerHTML = state.cart.map((item, idx) =>
-      `<div class="item-row">
-        <span class="item-row-name">${item.name}</span>
-        <span class="item-row-price">${R$(item.price)}</span>
-        <button class="btn-remove-cart" data-idx="${idx}" title="Remover">✕</button>
-      </div>`
-    ).join('');
-    cartList.querySelectorAll('.btn-remove-cart').forEach(b =>
-      b.addEventListener('click', () => removeFromCart(+b.dataset.idx))
-    );
-  } else {
-    cartSection.style.display = 'none';
-    cartList.innerHTML = '';
+  if (cartSection && cartList) {
+    if (state.cart.length > 0) {
+      cartSection.style.display = '';
+      cartList.innerHTML = state.cart.map((item, idx) =>
+        `<div class="item-row">
+          <span class="item-row-name">${item.name}</span>
+          <span class="item-row-price">${R$(item.price)}</span>
+          <button class="btn-remove-cart" data-idx="${idx}" title="Remover">✕</button>
+        </div>`
+      ).join('');
+      cartList.querySelectorAll('.btn-remove-cart').forEach(b =>
+        b.addEventListener('click', () => removeFromCart(+b.dataset.idx))
+      );
+    } else {
+      cartSection.style.display = 'none';
+      cartList.innerHTML = '';
+    }
   }
 
+  const paySection = qs('#payment-section');
+  const coSection  = qs('#checkout-section');
   if (grandTotal > 0) {
-    qs('#payment-section').style.display = '';
-    qs('#payment-total-amount').textContent = R$(grandTotal);
-    qs('#checkout-section').style.display = 'none';
+    if (paySection) { paySection.style.display = ''; }
+    const totalEl = qs('#payment-total-amount');
+    if (totalEl) totalEl.textContent = R$(grandTotal);
+    if (coSection) coSection.style.display = 'none';
   } else {
-    qs('#payment-section').style.display = 'none';
-    qs('#checkout-section').style.display = '';
+    if (paySection) paySection.style.display = 'none';
+    if (coSection) coSection.style.display = '';
   }
 }
 
@@ -435,11 +456,12 @@ async function startPixPayment() {
 
   try {
     const { data } = await fns.httpsCallable('createPixPayment')({
-      amount: total,
-      roomId: state.foundRoom.id,
-      guestName: state.foundRoom.guestName,
+      amount:     total,
+      roomId:     state.foundRoom.id,
+      guestName:  state.foundRoom.guestName,
       roomNumber: state.foundRoom.roomNumber,
-      items: state.cart,
+      rsv:        state.foundRoom.rsv || '',
+      items:      state.cart,
     });
 
     state.currentPaymentId = data.paymentId;
@@ -492,11 +514,12 @@ async function startCardPayment() {
 
   try {
     const { data } = await fns.httpsCallable('createCardPreference')({
-      amount: total,
-      roomId: state.foundRoom.id,
-      guestName: state.foundRoom.guestName,
+      amount:     total,
+      roomId:     state.foundRoom.id,
+      guestName:  state.foundRoom.guestName,
       roomNumber: state.foundRoom.roomNumber,
-      items: state.cart,
+      rsv:        state.foundRoom.rsv || '',
+      items:      state.cart,
     });
     window.location.href = data.initPoint;
   } catch (err) {
@@ -522,18 +545,19 @@ async function confirmCheckout() {
   try {
     const batch = db.batch();
     const now   = SV();
-
-    batch.update(db.collection('rooms').doc(room.id), { status: 'checked-out', checkoutTime: now, updatedAt: now });
-
-    const coRef = db.collection('checkouts').doc();
-    batch.set(coRef, {
+    const coData = {
       roomId: room.id, rsv: room.rsv || '', roomNumber: room.roomNumber,
       guestName: room.guestName, finalBalance: room.balance || 0,
       checkoutTime: now, checkedOutBy: 'guest', adminUid: null,
-    });
+    };
 
-    const nRef = db.collection('notifications').doc();
-    batch.set(nRef, {
+    // Rule allows: active room + balance==0 → status='checked-out'
+    batch.update(db.collection('rooms').doc(room.id), {
+      status: 'checked-out', checkoutTime: now, updatedAt: now,
+    });
+    batch.set(db.collection('checkouts').doc(),       coData);
+    batch.set(db.collection('checkoutHistory').doc(), coData); // permanent, never deleted
+    batch.set(db.collection('notifications').doc(), {
       type: 'checkout',
       message: `🏨 Check-out — Quarto ${room.roomNumber} — ${room.guestName}`,
       roomNumber: room.roomNumber, roomId: room.id,
@@ -553,16 +577,22 @@ async function confirmCheckout() {
 }
 
 function showCheckoutSuccess(room) {
-  qs('#guest-view').innerHTML = `
-    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:72px 20px;text-align:center;animation:fadeUp .4s ease">
-      <div style="font-size:3.5rem;margin-bottom:24px;opacity:.85">🏨</div>
-      <p style="font-size:.72rem;font-weight:600;letter-spacing:4px;text-transform:uppercase;color:var(--blue);margin-bottom:14px">Check-Out Concluído</p>
-      <h2 style="font-family:'Playfair Display',serif;font-size:2.2rem;font-weight:700;color:var(--text);margin-bottom:10px;letter-spacing:-.3px">Até logo!</h2>
-      <div style="width:36px;height:2px;background:var(--blue);border-radius:2px;margin:0 auto 20px;box-shadow:0 0 12px var(--blue-glow)"></div>
-      <p style="color:var(--text-sub);font-size:.95rem;margin-bottom:4px">Quarto <strong style="color:var(--text)">${room.roomNumber}</strong> — ${room.guestName}</p>
-      <p style="color:var(--text-sub);font-size:.88rem;margin-bottom:36px">Obrigado pela sua estadia.</p>
-      <button class="btn-primary" style="max-width:260px" onclick="location.reload()">Novo Check-Out</button>
-    </div>`;
+  qs('.guest-search-card').style.display = 'none';
+  qs('#guest-balance-view').style.display = 'none';
+  const banner = qs('#checkout-success-banner');
+  qs('#checkout-success-room').innerHTML = `Quarto <strong style="color:var(--text)">${room.roomNumber}</strong> — ${room.guestName}`;
+  banner.style.display = '';
+}
+
+function resetGuestView() {
+  qs('#checkout-success-banner').style.display = 'none';
+  qs('.guest-search-card').style.display = '';
+  qs('#guest-balance-view').style.display = 'none';
+  qs('#products-section').style.display = 'none';
+  const gn = qs('#guest-name');   if (gn) gn.value = '';
+  const gr = qs('#guest-room');   if (gr) gr.value = '';
+  state.foundRoom = null;
+  state.cart = [];
 }
 
 // ── Admin — Subscriptions ──────────────────────────────────────────────────
@@ -570,10 +600,17 @@ function startAdminSubs() {
   subscribeRooms();
   subscribeCheckouts();
   subscribeNotifications();
+  subscribePayments();
+  subscribeHistory();
+  subscribeUploadMeta();
 }
 function stopAdminSubs() {
-  [state.roomsUnsubscribe, state.checkoutsUnsubscribe, state.notifUnsubscribe].forEach(fn => fn && fn());
-  state.roomsUnsubscribe = state.checkoutsUnsubscribe = state.notifUnsubscribe = null;
+  [
+    state.roomsUnsubscribe, state.checkoutsUnsubscribe, state.notifUnsubscribe,
+    state.paymentsUnsubscribe, state.historyUnsubscribe, state.uploadMetaUnsubscribe,
+  ].forEach(fn => fn && fn());
+  state.roomsUnsubscribe = state.checkoutsUnsubscribe = state.notifUnsubscribe =
+  state.paymentsUnsubscribe = state.historyUnsubscribe = state.uploadMetaUnsubscribe = null;
 }
 
 // ── Admin — Rooms ──────────────────────────────────────────────────────────
@@ -741,6 +778,231 @@ function exportCheckoutsExcel() {
   toast('Relatório exportado!', 'success');
 }
 
+// ── Admin — Histórico permanente ──────────────────────────────────────────────
+function subscribeHistory() {
+  if (state.historyUnsubscribe) state.historyUnsubscribe();
+  state.historyUnsubscribe = db.collection('checkoutHistory')
+    .orderBy('checkoutTime', 'desc').limit(1000)
+    .onSnapshot(snap => {
+      state.allHistory = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      renderHistory(state.allHistory);
+    }, console.error);
+}
+
+function renderHistory(history) {
+  const container = qs('#history-list');
+  if (!container) return;
+
+  const textF = (qs('#filter-history')?.value || '').toLowerCase();
+  const fromF = qs('#filter-history-from')?.value;
+  const toF   = qs('#filter-history-to')?.value;
+
+  let list = history;
+  if (textF) list = list.filter(c =>
+    c.roomNumber?.toLowerCase().includes(textF) || c.guestName?.toLowerCase().includes(textF));
+  if (fromF) {
+    const from = new Date(fromF);
+    list = list.filter(c => c.checkoutTime && (c.checkoutTime.toDate?.() || new Date(c.checkoutTime)) >= from);
+  }
+  if (toF) {
+    const to = new Date(toF); to.setHours(23, 59, 59, 999);
+    list = list.filter(c => c.checkoutTime && (c.checkoutTime.toDate?.() || new Date(c.checkoutTime)) <= to);
+  }
+
+  if (!list.length) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📜</div><p>Nenhum check-out encontrado.</p></div>';
+    return;
+  }
+
+  container.innerHTML = `<div class="checkouts-table-wrap"><table>
+    <thead><tr><th>#</th><th>Quarto</th><th>Hóspede</th><th>RSV</th><th>Saldo</th><th>Horário</th><th>Por</th></tr></thead>
+    <tbody>${list.map((c, i) => `
+      <tr>
+        <td style="color:var(--text-dim)">${i + 1}</td>
+        <td class="td-room">${c.roomNumber}</td>
+        <td>${c.guestName}</td>
+        <td style="color:var(--text-dim);font-size:.8rem">${c.rsv || '—'}</td>
+        <td style="color:var(--${(c.finalBalance||0) > 0 ? 'warn':'success'})">${R$(c.finalBalance)}</td>
+        <td class="td-time">${fmtDate(c.checkoutTime)}</td>
+        <td><span class="${c.checkedOutBy === 'admin' ? 'badge-admin' : 'badge-guest'}">${c.checkedOutBy === 'admin' ? '🔑 Admin' : '👤 Hóspede'}</span></td>
+      </tr>`).join('')}
+    </tbody></table></div>
+    <p style="padding:10px 4px;color:var(--text-dim);font-size:.78rem">${list.length} registro(s) • histórico permanente</p>`;
+}
+
+function exportHistoryExcel() {
+  const list = state.allHistory;
+  if (!list.length) { toast('Nenhum histórico para exportar.', 'warning'); return; }
+  const rows = list.map(c => ({
+    'Quarto': c.roomNumber, 'Hóspede': c.guestName, 'RSV': c.rsv || '',
+    'Saldo Final (R$)': Number((c.finalBalance || 0).toFixed(2)),
+    'Horário': fmtDate(c.checkoutTime),
+    'Realizado por': c.checkedOutBy === 'admin' ? 'Admin' : 'Hóspede',
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Histórico');
+  XLSX.writeFile(wb, `historico_checkouts_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  toast('Histórico exportado!', 'success');
+}
+
+// ── Admin — Payments ──────────────────────────────────────────────────────────
+function subscribePayments() {
+  if (state.paymentsUnsubscribe) state.paymentsUnsubscribe();
+  state.paymentsUnsubscribe = db.collection('payments').orderBy('createdAt', 'desc')
+    .onSnapshot(snap => {
+      state.allPayments = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      renderPayments(state.allPayments);
+    }, console.error);
+}
+
+function renderPayments(payments) {
+  const container = qs('#payments-list');
+  if (!container) return;
+
+  const textF   = (qs('#filter-payment')?.value || '').toLowerCase();
+  const methodF = qs('#filter-payment-method')?.value || '';
+
+  let list = payments;
+  if (textF)   list = list.filter(p => p.roomNumber?.toLowerCase().includes(textF) || p.guestName?.toLowerCase().includes(textF));
+  if (methodF) list = list.filter(p => p.method === methodF);
+
+  if (!list.length) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">💰</div><p>Nenhum pagamento encontrado.</p></div>';
+    return;
+  }
+
+  const approved = list.filter(p => p.status === 'approved').length;
+  const total    = list.filter(p => p.status === 'approved').reduce((s, p) => s + (p.amount || 0), 0);
+
+  const summary = `
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+      <div class="stat-chip"><strong style="color:var(--success)">${approved}</strong><span style="color:var(--text-sub)">aprovados</span></div>
+      <div class="stat-chip"><strong style="color:var(--blue)">${R$(total)}</strong><span style="color:var(--text-sub)">total recebido</span></div>
+    </div>`;
+
+  container.innerHTML = summary + `<div class="checkouts-table-wrap"><table>
+    <thead><tr>
+      <th>#</th><th>Quarto</th><th>Hóspede</th><th>RSV</th>
+      <th>Método</th><th>Valor</th><th>Status</th><th>Horário</th><th>Comprovante</th>
+    </tr></thead>
+    <tbody>${list.map((p, i) => {
+      const method  = p.method === 'pix' ? '🔷 PIX' : '💳 Cartão';
+      const status  = p.status === 'approved'
+        ? '<span class="badge-admin">✅ Aprovado</span>'
+        : '<span class="badge-guest">⏳ Pendente</span>';
+      return `<tr>
+        <td style="color:var(--text-dim)">${i + 1}</td>
+        <td class="td-room">${p.roomNumber || '—'}</td>
+        <td style="font-weight:600">${p.guestName || '—'}</td>
+        <td style="color:var(--text-dim);font-size:.8rem">${p.rsv || '—'}</td>
+        <td>${method}</td>
+        <td style="font-family:'Playfair Display',serif;font-weight:700;color:var(--blue)">${R$(p.amount)}</td>
+        <td>${status}</td>
+        <td class="td-time">${fmtDate(p.createdAt)}</td>
+        <td><button class="btn-secondary btn-sm btn-print-receipt" data-id="${p.id}" ${p.status !== 'approved' ? 'disabled' : ''}>🖨 Imprimir</button></td>
+      </tr>`;
+    }).join('')}
+    </tbody></table></div>`;
+
+  container.querySelectorAll('.btn-print-receipt:not([disabled])').forEach(btn =>
+    btn.addEventListener('click', () => {
+      const p = state.allPayments.find(x => x.id === btn.dataset.id);
+      if (p) printReceipt(p);
+    })
+  );
+}
+
+function printReceipt(payment) {
+  const method = payment.method === 'pix' ? 'PIX' : 'Cartão de Crédito / Google Pay';
+  const mpId   = payment.mercadoPagoId || payment.preferenceId || '—';
+  const items  = (payment.items || []).length > 0
+    ? `<table style="width:100%;border-collapse:collapse;margin:8px 0">
+        ${payment.items.map(i => `<tr>
+          <td style="padding:4px 0;border-bottom:1px solid #eee;font-size:12px">${i.name}</td>
+          <td style="padding:4px 0;border-bottom:1px solid #eee;font-size:12px;text-align:right;font-weight:600">R$ ${Number(i.price).toFixed(2).replace('.',',')}</td>
+        </tr>`).join('')}
+      </table>`
+    : '';
+
+  const html = `<!DOCTYPE html><html><head>
+<meta charset="UTF-8"><title>Comprovante</title>
+<style>
+  body{font-family:Arial,sans-serif;padding:32px 28px;color:#111;font-size:14px}
+  h1{font-size:17px;margin-bottom:2px}
+  .sub{color:#666;font-size:11px;margin-bottom:20px}
+  table.info{width:100%;border-collapse:collapse}
+  table.info td{padding:6px 0;border-bottom:1px solid #eee;font-size:13px;vertical-align:top}
+  table.info td:first-child{color:#666;width:38%}
+  table.info td:last-child{font-weight:600}
+  .total{font-size:17px;font-weight:700;color:#1a56db}
+  .stamp{display:inline-block;border:2px solid #16a34a;color:#16a34a;border-radius:4px;padding:2px 10px;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase}
+  .footer{margin-top:28px;font-size:10px;color:#999;text-align:center;border-top:1px dashed #ddd;padding-top:12px}
+  .print-btn{margin-top:20px;padding:10px 22px;background:#2563eb;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-weight:600}
+  @media print{.print-btn{display:none}}
+</style></head>
+<body>
+  <h1>Comprovante de Pagamento</h1>
+  <div class="sub">Fast Check-Out · Hotel</div>
+  <table class="info">
+    <tr><td>Quarto</td><td>${payment.roomNumber || '—'}</td></tr>
+    <tr><td>Hóspede</td><td>${payment.guestName || '—'}</td></tr>
+    <tr><td>RSV</td><td>${payment.rsv || '—'}</td></tr>
+    <tr><td>Forma de Pagamento</td><td>${method}</td></tr>
+    ${items ? `<tr><td>Consumo</td><td>${items}</td></tr>` : ''}
+    <tr><td>Valor Total</td><td class="total">R$ ${Number(payment.amount).toFixed(2).replace('.',',')}</td></tr>
+    <tr><td>Status</td><td><span class="stamp">Aprovado</span></td></tr>
+    <tr><td>Data / Hora</td><td>${fmtDate(payment.createdAt)}</td></tr>
+    <tr><td>ID Mercado Pago</td><td style="font-size:11px;word-break:break-all">${mpId}</td></tr>
+  </table>
+  <div class="footer">Comprovante gerado automaticamente · Fast Check-Out Hotel<br>${new Date().toLocaleString('pt-BR')}</div>
+  <br>
+  <button class="print-btn" onclick="window.print()">🖨 Imprimir / Salvar PDF</button>
+</body></html>`;
+
+  const url = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }));
+  const w   = window.open(url, '_blank', 'width=460,height=680');
+  w?.focus();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+window.printReceipt = printReceipt;
+
+async function clearDayData() {
+  if (!confirm('⚠️ Isso apagará TODOS os quartos, check-outs e notificações.\nOs comprovantes de pagamento (PIX/cartão) são preservados.\n\nContinuar?')) return;
+
+  const btn = qs('#btn-clear-day');
+  btn.textContent = 'Limpando…';
+  btn.disabled = true;
+
+  try {
+    const deleteInChunks = async snap => {
+      for (let i = 0; i < snap.docs.length; i += 400) {
+        const batch = db.batch();
+        snap.docs.slice(i, i + 400).forEach(d => batch.delete(d.ref));
+        await batch.commit();
+      }
+    };
+
+    const [roomsSnap, coSnap, notifSnap] = await Promise.all([
+      db.collection('rooms').get(),
+      db.collection('checkouts').get(),
+      db.collection('notifications').get(),
+    ]);
+    await deleteInChunks(roomsSnap);
+    await deleteInChunks(coSnap);
+    await deleteInChunks(notifSnap);
+    await db.collection('meta').doc('lastUpload').delete().catch(() => {});
+
+    toast('Dados do dia limpos. Faça o upload do novo Excel.', 'success', 6000);
+    showTab('upload');
+  } catch (err) {
+    toast('Erro ao limpar dados: ' + err.message, 'error');
+  } finally {
+    btn.textContent = '🗑 Limpar Dados do Dia';
+    btn.disabled = false;
+  }
+}
+
 // ── Admin — Excel Upload ───────────────────────────────────────────────────
 let parsedData = [];
 
@@ -759,7 +1021,7 @@ function readExcel(file) {
   const reader = new FileReader();
   reader.onload = e => {
     try {
-      const wb   = XLSX.read(e.target.result, { type: 'binary' });
+      const wb   = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
       const ws   = wb.Sheets[wb.SheetNames[0]];
       const json = XLSX.utils.sheet_to_json(ws, { defval: '' });
       if (!json.length) { toast('Arquivo vazio.', 'error'); return; }
@@ -783,7 +1045,7 @@ function readExcel(file) {
       toast('Erro ao ler arquivo: ' + err.message, 'error');
     }
   };
-  reader.readAsBinaryString(file);
+  reader.readAsArrayBuffer(file);
 }
 
 function showPreview(data) {
@@ -813,33 +1075,40 @@ async function confirmImport() {
   btn.textContent = 'Importando…';
   btn.disabled = true;
 
-  const bar  = document.createElement('div');  bar.className = 'progress-bar-wrap';
+  const bar  = document.createElement('div'); bar.className = 'progress-bar-wrap';
   const fill = document.createElement('div'); fill.className = 'progress-bar'; fill.style.width = '0%';
   bar.appendChild(fill); btn.after(bar);
 
   try {
+    // Step 1: delete all existing rooms (fresh start)
+    fill.style.width = '5%';
+    const existingSnap = await db.collection('rooms').get();
+    for (let i = 0; i < existingSnap.docs.length; i += 400) {
+      const batch = db.batch();
+      existingSnap.docs.slice(i, i + 400).forEach(d => batch.delete(d.ref));
+      await batch.commit();
+    }
+    fill.style.width = '20%';
+
+    // Step 2: import all rows as new documents
     const total = parsedData.length;
     let done = 0;
     for (let i = 0; i < total; i += 400) {
-      const chunk = parsedData.slice(i, i + 400);
       const batch = db.batch();
-      for (const row of chunk) {
-        let snap;
-        try {
-          snap = await db.collection('rooms').where('roomNumber', '==', row.roomNumber).where('status', '==', 'active').limit(1).get();
-        } catch {
-          snap = await db.collection('rooms').where('roomNumber', '==', row.roomNumber).limit(1).get();
-        }
-        const nowSV = SV();
-        if (!snap.empty && snap.docs[0].data().status === 'active') {
-          batch.update(snap.docs[0].ref, { rsv: row.rsv, guestName: row.guestName, balance: row.balance, debit: row.debit, invoice: row.invoice, updatedAt: nowSV });
-        } else {
-          batch.set(db.collection('rooms').doc(), { rsv: row.rsv, guestName: row.guestName, roomNumber: row.roomNumber, balance: row.balance, debit: row.debit, invoice: row.invoice, status: 'active', checkoutTime: null, uploadedAt: nowSV, updatedAt: nowSV });
-        }
-        fill.style.width = `${Math.round((++done / total) * 100)}%`;
+      const nowSV = SV();
+      for (const row of parsedData.slice(i, i + 400)) {
+        batch.set(db.collection('rooms').doc(), {
+          rsv: row.rsv, guestName: row.guestName, roomNumber: row.roomNumber,
+          balance: row.balance, debit: row.debit, invoice: row.invoice,
+          status: 'active', checkoutTime: null, uploadedAt: nowSV, updatedAt: nowSV,
+        });
+        fill.style.width = `${20 + Math.round((++done / total) * 80)}%`;
       }
       await batch.commit();
     }
+    await db.collection('meta').doc('lastUpload').set({
+      uploadedAt: SV(), count: total, uploadedBy: state.user?.uid || 'unknown',
+    });
     toast(`✅ ${total} reservas importadas!`, 'success');
     cancelImport();
     showTab('rooms');
@@ -857,6 +1126,47 @@ function cancelImport() {
   qs('#upload-preview').style.display = 'none';
   qs('#upload-area').style.display    = '';
   qs('#preview-table-container').innerHTML = '';
+}
+
+function subscribeUploadMeta() {
+  if (state.uploadMetaUnsubscribe) state.uploadMetaUnsubscribe();
+  state.uploadMetaUnsubscribe = db.collection('meta').doc('lastUpload')
+    .onSnapshot(doc => {
+      const card = qs('#last-upload-card');
+      const info = qs('#last-upload-info');
+      if (!card || !info) return;
+      if (doc.exists) {
+        const d = doc.data();
+        info.innerHTML = `Último upload: <strong>${fmtDate(d.uploadedAt)}</strong> — <strong>${d.count}</strong> reservas`;
+        card.style.display = '';
+      } else {
+        card.style.display = 'none';
+      }
+    }, console.error);
+}
+
+async function undoUpload() {
+  if (!confirm('Remover todos os quartos do último upload?\nCheck-outs e comprovantes de pagamento são preservados.\n\nContinuar?')) return;
+
+  const btn = qs('#btn-undo-upload');
+  btn.textContent = 'Removendo…';
+  btn.disabled = true;
+
+  try {
+    const snap = await db.collection('rooms').get();
+    for (let i = 0; i < snap.docs.length; i += 400) {
+      const batch = db.batch();
+      snap.docs.slice(i, i + 400).forEach(d => batch.delete(d.ref));
+      await batch.commit();
+    }
+    await db.collection('meta').doc('lastUpload').delete().catch(() => {});
+    toast('Quartos removidos. Faça o upload do novo Excel.', 'success', 6000);
+  } catch (err) {
+    toast('Erro ao remover quartos: ' + err.message, 'error');
+  } finally {
+    btn.textContent = '🗑 Remover Quartos';
+    btn.disabled = false;
+  }
 }
 
 // ── Notifications ──────────────────────────────────────────────────────────
@@ -977,6 +1287,9 @@ function bindEvents() {
     navigator.clipboard?.writeText(code).then(() => toast('Código copiado!', 'success', 2000));
   });
 
+  // Guest success banner
+  qs('#btn-new-checkout').addEventListener('click', resetGuestView);
+
   // Checkout
   qs('#btn-checkout').addEventListener('click', openCheckoutModal);
   qs('#btn-confirm-checkout').addEventListener('click', confirmCheckout);
@@ -996,6 +1309,7 @@ function bindEvents() {
   qs('#filter-room').addEventListener('input', () => renderCheckouts(state.allCheckouts));
   qs('#filter-date').addEventListener('change', () => renderCheckouts(state.allCheckouts));
   qs('#btn-export-excel').addEventListener('click', exportCheckoutsExcel);
+  qs('#btn-clear-day').addEventListener('click', clearDayData);
 
   // Products admin
   qs('#filter-prod-admin').addEventListener('input', () => renderProductsAdmin(state.allProducts));
@@ -1016,10 +1330,21 @@ function bindEvents() {
     qs('#prod-image-preview-wrap').style.display = url ? '' : 'none';
   });
 
+  // Payments
+  qs('#filter-payment').addEventListener('input',  () => renderPayments(state.allPayments));
+  qs('#filter-payment-method').addEventListener('change', () => renderPayments(state.allPayments));
+
+  // History
+  qs('#filter-history').addEventListener('input',      () => renderHistory(state.allHistory));
+  qs('#filter-history-from').addEventListener('change', () => renderHistory(state.allHistory));
+  qs('#filter-history-to').addEventListener('change',   () => renderHistory(state.allHistory));
+  qs('#btn-export-history').addEventListener('click', exportHistoryExcel);
+
   // Upload
   setupUpload();
   qs('#btn-confirm-upload').addEventListener('click', confirmImport);
   qs('#btn-cancel-upload').addEventListener('click', cancelImport);
+  qs('#btn-undo-upload').addEventListener('click', undoUpload);
 }
 
 // ── Bootstrap ──────────────────────────────────────────────────────────────
@@ -1027,5 +1352,10 @@ function bindEvents() {
   handleMPReturn();
   bindEvents();
   showView('guest-view');
-  subscribeProductsGlobal(); // products always available (guests + admins)
+  subscribeProductsGlobal();
+  // Clear guest form after browser autofill has a chance to fire
+  setTimeout(() => {
+    const gn = qs('#guest-name'); if (gn) gn.value = '';
+    const gr = qs('#guest-room'); if (gr) gr.value = '';
+  }, 400);
 })();
