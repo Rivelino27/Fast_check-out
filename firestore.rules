@@ -66,5 +66,12 @@ service cloud.firestore {
     match /meta/{docId} {
       allow read, write: if isAdmin();
     }
+
+    // Log de edições de reservas: admin lê e cria, ninguém apaga/edita
+    match /roomEdits/{editId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin();
+      allow update, delete: if false;
+    }
   }
 }

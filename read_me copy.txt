@@ -24,6 +24,7 @@ cd functions ; npm install ; cd ..
 cd functions ; npm install ; cd .. ; firebase deploy
 firebase deploy
 
+Pressione Ctrl + Shift + R (Windows) ou Cmd + Shift + R (Mac) para forçar o reload sem cache.
 
 ## Visão Geral do Sistema
 

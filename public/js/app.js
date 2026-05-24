@@ -205,6 +205,30 @@ function renderGuestBalance(room) {
   balEl.textContent = R$(bal);
   balEl.className   = 'balance-amount ' + (bal > 0 ? 'neon-pink' : 'neon-green');
 
+  // Show guest-visible categories and observation
+  const infoBox = qs('#guest-balance-info');
+  if (infoBox) {
+    const cats = Array.isArray(room.balanceCategories)
+      ? room.balanceCategories
+      : (room.balanceCategory ? [room.balanceCategory] : []);
+    const obsGuest = room.observationsGuest || '';
+    let html = '';
+    if (cats.length > 0 && bal > 0) {
+      html += `<div class="guest-cats-info">
+        <span class="guest-info-label">${t('cats_saldo_label')}</span>
+        <span>${cats.map(c => `<span class="cat-tag-guest">${tCat(c)}</span>`).join('')}</span>
+      </div>`;
+    }
+    if (obsGuest) {
+      html += `<div class="guest-obs-info">
+        <span class="guest-info-label">ℹ ${t('obs_hospede_display')}:</span>
+        <span>${obsGuest}</span>
+      </div>`;
+    }
+    infoBox.innerHTML = html;
+    infoBox.style.display = html ? '' : 'none';
+  }
+
   qs('#guest-balance-view').style.display = '';
   refreshGuestUI(bal);
 }
@@ -326,12 +350,12 @@ function renderProductsAdmin(products) {
   container.innerHTML = `<div class="checkouts-table-wrap">
     <table>
       <thead><tr>
-        <th style="width:54px">Img</th>
-        <th>Nome</th>
-        <th>Descrição</th>
-        <th>Preço</th>
-        <th>Status</th>
-        ${state.isSuperAdmin ? '<th>Ações</th>' : ''}
+        <th style="width:54px">${t('th_img')}</th>
+        <th>${t('th_nome')}</th>
+        <th>${t('th_descricao')}</th>
+        <th>${t('th_preco')}</th>
+        <th>${t('th_status')}</th>
+        ${state.isSuperAdmin ? `<th>${t('th_acoes')}</th>` : ''}
       </tr></thead>
       <tbody>${filtered.map(p => `
         <tr>
@@ -343,8 +367,8 @@ function renderProductsAdmin(products) {
           <td style="font-weight:600">${p.name}</td>
           <td style="color:var(--text-sub);font-size:.83rem">${p.description || '—'}</td>
           <td style="font-family:'Playfair Display',serif;font-weight:700;color:var(--blue)">${R$(p.price)}</td>
-          <td><span class="${p.available !== false ? 'badge-admin' : 'badge-guest'}">${p.available !== false ? '✅ Ativo' : '⏸ Inativo'}</span></td>
-          ${state.isSuperAdmin ? `<td><button class="btn-secondary btn-sm btn-edit-prod" data-id="${p.id}">Editar</button></td>` : ''}
+          <td><span class="${p.available !== false ? 'badge-admin' : 'badge-guest'}">${p.available !== false ? t('prod_ativo') : t('prod_inativo')}</span></td>
+          ${state.isSuperAdmin ? `<td><button class="btn-secondary btn-sm btn-edit-prod" data-id="${p.id}">${t('editar')}</button></td>` : ''}
         </tr>`).join('')}
       </tbody>
     </table>
@@ -576,7 +600,7 @@ async function confirmCheckout() {
     const coData = {
       roomId: room.id, rsv: room.rsv || '', roomNumber: room.roomNumber,
       guestName: room.guestName, finalBalance: room.balance || 0,
-      checkoutTime: now, checkedOutBy: 'guest', adminUid: null,
+      checkoutTime: now, checkedOutBy: 'guest', adminUid: null, seen: false,
     };
 
     // Rule allows: active room + balance==0 → status='checked-out'
@@ -679,8 +703,8 @@ function renderRoomsGrid(rooms) {
 
   if (!sorted.length) {
     grid.innerHTML = rooms.length
-      ? '<div class="empty-state"><div class="empty-state-icon">🔍</div><p>Nenhum quarto encontrado com esse filtro.</p></div>'
-      : '<div class="empty-state"><div class="empty-state-icon">🏨</div><p>Nenhum quarto. Use a aba <strong>Upload</strong> para importar reservas.</p></div>';
+      ? `<div class="empty-state"><div class="empty-state-icon">🔍</div><p>${t('nenhum_quarto_filtro')}</p></div>`
+      : `<div class="empty-state"><div class="empty-state-icon">🏨</div><p>${t('nenhum_quarto')}</p></div>`;
     return;
   }
 
@@ -690,9 +714,9 @@ function renderRoomsGrid(rooms) {
 
   const stats = `
     <div style="grid-column:1/-1;display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px">
-      <div class="stat-chip"><strong style="color:var(--text)">${active}</strong><span style="color:var(--text-sub)">ativos</span></div>
-      <div class="stat-chip"><strong style="color:var(--warn)">${withBal}</strong><span style="color:var(--text-sub)">com saldo</span></div>
-      <div class="stat-chip"><strong style="color:var(--success)">${couted}</strong><span style="color:var(--text-sub)">check-out</span></div>
+      <div class="stat-chip"><strong style="color:var(--text)">${active}</strong><span style="color:var(--text-sub)">${t('stat_ativos')}</span></div>
+      <div class="stat-chip"><strong style="color:var(--warn)">${withBal}</strong><span style="color:var(--text-sub)">${t('stat_com_saldo')}</span></div>
+      <div class="stat-chip"><strong style="color:var(--success)">${couted}</strong><span style="color:var(--text-sub)">${t('stat_check_out')}</span></div>
     </div>`;
 
   grid.innerHTML = stats + sorted.map(r => {
@@ -700,25 +724,32 @@ function renderRoomsGrid(rooms) {
     const isOut       = r.status === 'checked-out';
     const cardClass   = isOut ? 'checked-out' : (bal > 0 ? 'has-balance' : 'no-balance');
     const canCheckout = !isOut && bal === 0;
-    const needsRec    = r.requiresReception ? '<span class="flag flag-reception">📞 Recep.</span>' : '';
-    const catLabel    = r.balanceCategory && !isOut ? `<span class="flag flag-cat">${r.balanceCategory}</span>` : '';
-    const balLabel    = isOut
-      ? '<span style="color:var(--success)">Saída</span>'
+    const needsRec    = r.requiresReception ? `<span class="flag flag-reception">📞 ${t('tab_quartos') === 'Quartos' ? 'Recep.' : 'Front'}</span>` : '';
+    // Support both old string and new array
+    const cats = Array.isArray(r.balanceCategories)
+      ? r.balanceCategories
+      : (r.balanceCategory ? [r.balanceCategory] : []);
+    const catFlags = cats.length > 0 && !isOut
+      ? cats.map(c => `<span class="flag flag-cat">${tCat(c)}</span>`).join('')
+      : '';
+    const balLabel = isOut
+      ? `<span style="color:var(--success)">${t('stat_check_out')}</span>`
       : `<span style="color:${bal > 0 ? 'var(--warn)' : 'var(--success)'}">${R$(bal)}</span>`;
+    const internalObs = r.observationsInternal || r.observations || '';
     return `<div class="room-card ${cardClass}${r.requiresReception ? ' needs-reception' : ''}">
       <div class="room-card-num">${r.roomNumber}</div>
       <div class="room-card-name">${r.guestName}</div>
       <div class="room-card-rsv">RSV: ${r.rsv || '—'}</div>
       <div class="room-card-balance">${balLabel}</div>
       <div class="room-card-flags">
-        ${r.debit   ? '<span class="flag flag-debit">Débito</span>'  : ''}
-        ${r.invoice ? '<span class="flag flag-invoice">Fatura</span>' : ''}
-        ${needsRec}${catLabel}
+        ${r.debit   ? `<span class="flag flag-debit">${t('th_debito')}</span>`  : ''}
+        ${r.invoice ? `<span class="flag flag-invoice">${t('th_fatura')}</span>` : ''}
+        ${needsRec}${catFlags}
       </div>
-      ${r.observations ? `<div class="room-card-obs">${r.observations}</div>` : ''}
+      ${internalObs ? `<div class="room-card-obs">${internalObs}</div>` : ''}
       <div class="room-card-actions">
         <button class="btn-admin-checkout" data-id="${r.id}" ${!canCheckout ? 'disabled' : ''}>
-          ${isOut ? '✅ Feito' : (bal > 0 ? '⚠ Saldo pend.' : 'Check-Out')}
+          ${isOut ? t('checkout_feito_badge') : (bal > 0 ? t('saldo_pendente_badge') : 'Check-Out')}
         </button>
         ${!isOut ? `<button class="btn-room-edit btn-ghost btn-sm" data-id="${r.id}">✏</button>` : ''}
       </div>
@@ -762,8 +793,8 @@ function renderCheckins(rooms) {
 
   container.innerHTML = `<div class="checkouts-table-wrap"><table>
     <thead><tr>
-      <th>#</th><th>Quarto</th><th>Hóspede</th><th>RSV</th>
-      <th>Saldo</th><th>Débito</th><th>Fatura</th><th>Importado em</th>
+      <th>#</th><th>${t('th_quarto')}</th><th>${t('th_hospede')}</th><th>${t('th_rsv')}</th>
+      <th>${t('th_saldo')}</th><th>${t('th_debito')}</th><th>${t('th_fatura')}</th><th>${t('th_importado')}</th>
     </tr></thead>
     <tbody>${list.map((r, i) => `
       <tr>
@@ -772,8 +803,8 @@ function renderCheckins(rooms) {
         <td style="font-weight:600">${r.guestName}</td>
         <td style="color:var(--text-dim);font-size:.8rem">${r.rsv || '—'}</td>
         <td style="color:var(--${(r.balance||0) > 0 ? 'warn':'success'})">${R$(r.balance)}</td>
-        <td>${r.debit   ? '<span class="flag flag-debit">Sim</span>'    : '<span style="color:var(--text-dim)">Não</span>'}</td>
-        <td>${r.invoice ? '<span class="flag flag-invoice">Sim</span>'  : '<span style="color:var(--text-dim)">Não</span>'}</td>
+        <td>${r.debit   ? `<span class="flag flag-debit">${t('sim')}</span>`    : `<span style="color:var(--text-dim)">${t('nao')}</span>`}</td>
+        <td>${r.invoice ? `<span class="flag flag-invoice">${t('sim')}</span>`  : `<span style="color:var(--text-dim)">${t('nao')}</span>`}</td>
         <td class="td-time">${fmtDate(r.uploadedAt || r.updatedAt)}</td>
       </tr>`).join('')}
     </tbody></table></div>`;
@@ -810,18 +841,38 @@ function renderCheckouts(checkouts) {
   }
 
   container.innerHTML = `<div class="checkouts-table-wrap"><table>
-    <thead><tr><th>#</th><th>Quarto</th><th>Hóspede</th><th>RSV</th><th>Saldo</th><th>Horário</th><th>Por</th></tr></thead>
-    <tbody>${list.map((c, i) => `
-      <tr>
-        <td style="color:var(--text-dim)">${i + 1}</td>
+    <thead><tr>
+      <th>#</th><th>${t('th_quarto')}</th><th>${t('th_hospede')}</th><th>${t('th_rsv')}</th>
+      <th>${t('th_saldo')}</th><th>${t('th_horario')}</th><th>${t('th_por')}</th><th></th>
+    </tr></thead>
+    <tbody>${list.map((c, i) => {
+      const isNew = c.seen === false;
+      return `<tr class="${isNew ? 'checkout-new' : ''}">
+        <td style="color:var(--text-dim)">
+          ${isNew ? `<span class="new-dot" title="${t('checkout_novo_badge')}"></span>` : ''}${i + 1}
+        </td>
         <td class="td-room">${c.roomNumber}</td>
         <td>${c.guestName}</td>
         <td style="color:var(--text-dim);font-size:.8rem">${c.rsv || '—'}</td>
         <td style="color:var(--${(c.finalBalance||0) > 0 ? 'warn':'success'})">${R$(c.finalBalance)}</td>
         <td class="td-time">${fmtDate(c.checkoutTime)}</td>
-        <td><span class="${c.checkedOutBy === 'admin' ? 'badge-admin' : 'badge-guest'}">${c.checkedOutBy === 'admin' ? '🔑 Admin' : '👤 Hóspede'}</span></td>
-      </tr>`).join('')}
+        <td><span class="${c.checkedOutBy === 'admin' ? 'badge-admin' : 'badge-guest'}">${c.checkedOutBy === 'admin' ? t('por_admin') : t('por_hospede')}</span></td>
+        <td>${isNew ? `<button class="btn-secondary btn-sm btn-mark-seen" data-co-id="${c.id}" style="white-space:nowrap">${t('marcar_visto')}</button>` : ''}</td>
+      </tr>`;
+    }).join('')}
     </tbody></table></div>`;
+
+  container.querySelectorAll('.btn-mark-seen').forEach(btn =>
+    btn.addEventListener('click', () => markCheckoutSeen(btn.dataset.coId))
+  );
+}
+
+async function markCheckoutSeen(checkoutId) {
+  try {
+    await db.collection('checkouts').doc(checkoutId).update({ seen: true });
+  } catch (err) {
+    toast('Erro: ' + err.message, 'error');
+  }
 }
 
 function exportCheckoutsExcel() {
@@ -876,7 +927,10 @@ function renderHistory(history) {
   }
 
   container.innerHTML = `<div class="checkouts-table-wrap"><table>
-    <thead><tr><th>#</th><th>Quarto</th><th>Hóspede</th><th>RSV</th><th>Saldo</th><th>Horário</th><th>Por</th></tr></thead>
+    <thead><tr>
+      <th>#</th><th>${t('th_quarto')}</th><th>${t('th_hospede')}</th><th>${t('th_rsv')}</th>
+      <th>${t('th_saldo')}</th><th>${t('th_horario')}</th><th>${t('th_por')}</th>
+    </tr></thead>
     <tbody>${list.map((c, i) => `
       <tr>
         <td style="color:var(--text-dim)">${i + 1}</td>
@@ -885,10 +939,10 @@ function renderHistory(history) {
         <td style="color:var(--text-dim);font-size:.8rem">${c.rsv || '—'}</td>
         <td style="color:var(--${(c.finalBalance||0) > 0 ? 'warn':'success'})">${R$(c.finalBalance)}</td>
         <td class="td-time">${fmtDate(c.checkoutTime)}</td>
-        <td><span class="${c.checkedOutBy === 'admin' ? 'badge-admin' : 'badge-guest'}">${c.checkedOutBy === 'admin' ? '🔑 Admin' : '👤 Hóspede'}</span></td>
+        <td><span class="${c.checkedOutBy === 'admin' ? 'badge-admin' : 'badge-guest'}">${c.checkedOutBy === 'admin' ? t('por_admin') : t('por_hospede')}</span></td>
       </tr>`).join('')}
     </tbody></table></div>
-    <p style="padding:10px 4px;color:var(--text-dim);font-size:.78rem">${list.length} registro(s) • histórico permanente</p>`;
+    <p style="padding:10px 4px;color:var(--text-dim);font-size:.78rem">${list.length} registro(s) • ${t('tab_historico').toLowerCase()} permanente</p>`;
 }
 
 function exportHistoryExcel() {
@@ -908,14 +962,16 @@ function exportHistoryExcel() {
 }
 
 // ── Admin — Room Edit ─────────────────────────────────────────────────────────
-function openRoomEdit(roomId) {
+async function openRoomEdit(roomId) {
   const room = state.allRooms.find(r => r.id === roomId);
   if (!room) return;
 
   qs('#room-edit-id').value      = roomId;
   qs('#room-edit-balance').value = room.balance || 0;
-  qs('#room-edit-obs').value     = room.observations || '';
-  qs('#room-edit-reception').checked = room.requiresReception || false;
+  // Support both old single-obs and new dual-obs fields
+  qs('#room-edit-obs-internal').value = room.observationsInternal || room.observations || '';
+  qs('#room-edit-obs-guest').value    = room.observationsGuest || '';
+  qs('#room-edit-reception').checked  = room.requiresReception || false;
 
   qs('#room-edit-header').innerHTML = `
     <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px;padding:12px 14px;
@@ -927,31 +983,112 @@ function openRoomEdit(roomId) {
       </div>
     </div>`;
 
-  const cat = room.balanceCategory || '';
-  qs('#room-edit-category-chips').querySelectorAll('.chip-btn').forEach(c =>
-    c.classList.toggle('active', c.dataset.cat === cat)
-  );
+  // Multi-select categories (support old string + new array)
+  const activeCats = Array.isArray(room.balanceCategories)
+    ? room.balanceCategories
+    : (room.balanceCategory ? [room.balanceCategory] : []);
+  qs('#room-edit-category-chips').querySelectorAll('.chip-btn').forEach(c => {
+    const isGeral = c.dataset.cat === '';
+    c.classList.toggle('active',
+      activeCats.length === 0 ? isGeral : activeCats.includes(c.dataset.cat)
+    );
+  });
 
   qs('#room-edit-modal').style.display = 'flex';
   setTimeout(() => qs('#room-edit-balance').focus(), 80);
+
+  // Load edit history asynchronously
+  const histWrap = qs('#room-edit-history');
+  const histList = qs('#room-edit-history-list');
+  if (!histWrap || !histList) return;
+  histWrap.style.display = '';
+  histList.innerHTML = `<div style="padding:8px 10px;color:var(--text-dim);font-size:.78rem">${t('carregando_historico')}</div>`;
+  try {
+    const snap = await db.collection('roomEdits')
+      .where('roomId', '==', roomId)
+      .orderBy('editedAt', 'desc')
+      .limit(8)
+      .get();
+    if (snap.empty) {
+      histWrap.style.display = 'none';
+    } else {
+      histList.innerHTML = snap.docs.map(d => {
+        const e = d.data();
+        const prev = Number(e.previousBalance || 0).toFixed(2).replace('.', ',');
+        const next = Number(e.newBalance      || 0).toFixed(2).replace('.', ',');
+        const changed = e.previousBalance !== e.newBalance;
+        const changeStr = changed
+          ? `R$ ${prev} → <strong style="color:var(--blue-hi)">R$ ${next}</strong>`
+          : `R$ ${next} <span style="opacity:.5;font-size:.74rem">(sem alt. saldo)</span>`;
+        // Cats stored as array or old string
+        const eCats = Array.isArray(e.balanceCategories) ? e.balanceCategories : (e.balanceCategory ? [e.balanceCategory] : []);
+        const catStr = eCats.length > 0 ? eCats.map(c => tCat(c)).join(', ') : '';
+        const internalObs = e.observationsInternal || e.observations || '';
+        return `<div class="edit-history-row">
+          <span class="edit-history-time">${fmtDate(e.editedAt)}</span>
+          <span class="edit-history-user">${e.editedBy?.email || '—'}</span>
+          <span class="edit-history-change">${changeStr}</span>
+          ${catStr ? `<span class="edit-history-cat">${catStr}</span>` : ''}
+          ${internalObs ? `<span class="edit-history-obs" style="width:100%">${internalObs}</span>` : ''}
+        </div>`;
+      }).join('');
+    }
+  } catch {
+    histWrap.style.display = 'none';
+  }
 }
 
 async function saveRoomEdit() {
-  const roomId    = qs('#room-edit-id').value;
-  const balance   = Math.max(0, parseFloat(qs('#room-edit-balance').value) || 0);
-  const obs       = qs('#room-edit-obs').value.trim();
-  const reception = qs('#room-edit-reception').checked;
-  const cat       = qs('#room-edit-category-chips .chip-btn.active')?.dataset.cat || '';
+  const roomId      = qs('#room-edit-id').value;
+  const balance     = Math.max(0, parseFloat(qs('#room-edit-balance').value) || 0);
+  const obsInternal = qs('#room-edit-obs-internal').value.trim();
+  const obsGuest    = qs('#room-edit-obs-guest').value.trim();
+  const reception   = qs('#room-edit-reception').checked;
+
+  // Collect multi-select categories (skip "Geral"="" if others are selected)
+  const activeChips = Array.from(qs('#room-edit-category-chips').querySelectorAll('.chip-btn.active'));
+  const selectedCats = activeChips.map(c => c.dataset.cat).filter(c => c !== '');
+  // If only "Geral" is active (no specific cat), store empty array
+  const balanceCategories = selectedCats;
+
+  const room            = state.allRooms.find(r => r.id === roomId);
+  const previousBalance = room?.balance ?? 0;
 
   const btn = qs('#btn-save-room-edit');
   btn.textContent = t('salvando');
   btn.disabled    = true;
 
   try {
-    await db.collection('rooms').doc(roomId).update({
-      balance, balanceCategory: cat, observations: obs,
-      requiresReception: reception, updatedAt: SV(),
+    const now   = SV();
+    const batch = db.batch();
+
+    batch.update(db.collection('rooms').doc(roomId), {
+      balance,
+      balanceCategories,
+      observationsInternal: obsInternal,
+      observationsGuest:    obsGuest,
+      requiresReception:    reception,
+      updatedAt:            now,
     });
+
+    batch.set(db.collection('roomEdits').doc(), {
+      roomId,
+      roomNumber:           room?.roomNumber || '',
+      guestName:            room?.guestName  || '',
+      previousBalance,
+      newBalance:           balance,
+      balanceCategories,
+      observationsInternal: obsInternal,
+      observationsGuest:    obsGuest,
+      requiresReception:    reception,
+      editedBy: {
+        uid:   state.user?.uid   || 'unknown',
+        email: state.user?.email || 'unknown',
+      },
+      editedAt: now,
+    });
+
+    await batch.commit();
     qs('#room-edit-modal').style.display = 'none';
     toast('Reserva atualizada!', 'success');
   } catch (err) {
@@ -1045,22 +1182,22 @@ function renderPayments(payments) {
 
   const summary = `
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">
-      <div class="stat-chip"><strong style="color:var(--success)">${approved}</strong><span style="color:var(--text-sub)">aprovados</span></div>
-      <div class="stat-chip"><strong style="color:var(--blue)">${R$(total)}</strong><span style="color:var(--text-sub)">total recebido</span></div>
+      <div class="stat-chip"><strong style="color:var(--success)">${approved}</strong><span style="color:var(--text-sub)">${t('stat_aprovados_n')}</span></div>
+      <div class="stat-chip"><strong style="color:var(--blue)">${R$(total)}</strong><span style="color:var(--text-sub)">${t('stat_total_recebido')}</span></div>
     </div>`;
 
   container.innerHTML = summary + `<div class="checkouts-table-wrap"><table>
     <thead><tr>
-      <th>#</th><th>Quarto</th><th>Hóspede</th><th>RSV</th>
-      <th>Método</th><th>Valor</th><th>Status</th><th>Horário</th><th>Comprovante</th>
+      <th>#</th><th>${t('th_quarto')}</th><th>${t('th_hospede')}</th><th>${t('th_rsv')}</th>
+      <th>${t('th_metodo')}</th><th>${t('th_valor')}</th><th>${t('th_status')}</th><th>${t('th_horario')}</th><th>${t('th_comprovante')}</th>
     </tr></thead>
     <tbody>${list.map((p, i) => {
-      const method  = p.method === 'pix' ? '🔷 PIX' : '💳 Cartão';
+      const method  = p.method === 'pix' ? t('pix_method') : t('cartao_method');
       const status  = p.status === 'approved'
-        ? '<span class="badge-admin">✅ Aprovado</span>'
+        ? `<span class="badge-admin">${t('status_aprovado_badge')}</span>`
         : p.status === 'rejected'
-        ? '<span style="color:var(--danger);font-size:.78rem;font-weight:600">❌ Recusado</span>'
-        : '<span class="badge-guest">⏳ Pendente</span>';
+        ? `<span style="color:var(--danger);font-size:.78rem;font-weight:600">${t('status_recusado_badge')}</span>`
+        : `<span class="badge-guest">${t('status_pendente_badge')}</span>`;
       return `<tr>
         <td style="color:var(--text-dim)">${i + 1}</td>
         <td class="td-room">${p.roomNumber || '—'}</td>
@@ -1070,7 +1207,7 @@ function renderPayments(payments) {
         <td style="font-family:'Playfair Display',serif;font-weight:700;color:var(--blue)">${R$(p.amount)}</td>
         <td>${status}</td>
         <td class="td-time">${fmtDate(p.createdAt)}</td>
-        <td><button class="btn-secondary btn-sm btn-print-receipt" data-id="${p.id}" ${p.status !== 'approved' ? 'disabled' : ''}>🖨 Imprimir</button></td>
+        <td><button class="btn-secondary btn-sm btn-print-receipt" data-id="${p.id}" ${p.status !== 'approved' ? 'disabled' : ''}>${t('imprimir')}</button></td>
       </tr>`;
     }).join('')}
     </tbody></table></div>`;
@@ -1533,8 +1670,20 @@ function bindEvents() {
   qs('#room-edit-category-chips').addEventListener('click', e => {
     const chip = e.target.closest('.chip-btn');
     if (!chip) return;
-    qs('#room-edit-category-chips').querySelectorAll('.chip-btn').forEach(c => c.classList.remove('active'));
-    chip.classList.add('active');
+    const chipsWrap = qs('#room-edit-category-chips');
+    if (chip.dataset.cat === '') {
+      // "Geral" — deselect all specific, select only Geral
+      chipsWrap.querySelectorAll('.chip-btn').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+    } else {
+      // Specific category — toggle it, always deselect "Geral"
+      chip.classList.toggle('active');
+      chipsWrap.querySelector('.chip-btn[data-cat=""]')?.classList.remove('active');
+      // If nothing is active, fall back to "Geral"
+      if (!chipsWrap.querySelector('.chip-btn.active')) {
+        chipsWrap.querySelector('.chip-btn[data-cat=""]')?.classList.add('active');
+      }
+    }
   });
 
   // Payments

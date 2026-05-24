@@ -19,10 +19,18 @@
     </div>
     <div class="nav-actions">
       <div class="lang-switcher">
-        <button class="lang-btn active" data-lang="pt" title="Português">🇧🇷</button>
-        <button class="lang-btn" data-lang="en" title="English">🇺🇸</button>
-        <button class="lang-btn" data-lang="es" title="Español">🇪🇸</button>
-        <button class="lang-btn" data-lang="zh" title="中文">🇨🇳</button>
+        <button class="lang-btn active" data-lang="pt" title="Português">
+          <img src="https://flagcdn.com/20x15/br.png" alt="PT">
+        </button>
+        <button class="lang-btn" data-lang="en" title="English">
+          <img src="https://flagcdn.com/20x15/us.png" alt="EN">
+        </button>
+        <button class="lang-btn" data-lang="es" title="Español">
+          <img src="https://flagcdn.com/20x15/es.png" alt="ES">
+        </button>
+        <button class="lang-btn" data-lang="zh" title="中文">
+          <img src="https://flagcdn.com/20x15/cn.png" alt="ZH">
+        </button>
       </div>
       <button id="btn-notifications" class="btn-icon" style="display:none" title="Notificações">
         <span>🔔</span>
@@ -85,7 +93,7 @@
           <h2 data-i18n="comparecer_recepcao">Dirija-se à Recepção</h2>
           <div class="gold-line"></div>
           <p data-i18n="msg_recepcao" style="color:var(--text-sub);font-size:.92rem;margin:16px 0 28px;text-align:center;max-width:340px">
-            Sua reserva requer atendimento na recepção. Por favor, compareça ao balcão ou ligue para a recepção.
+            Sua reserva requer atendimento na recepção.
           </p>
           <div style="display:flex;flex-direction:column;gap:10px;width:100%;max-width:280px">
             <button id="btn-call-reception" class="btn-primary" data-i18n="btn_recepcao">📞 Ligar para Recepção</button>
@@ -115,6 +123,9 @@
             <span class="balance-label" data-i18n="saldo_devedor">Saldo Devedor</span>
             <span id="display-balance" class="balance-amount neon-pink">R$ 0,00</span>
           </div>
+
+          <!-- Info: categorias + obs do hóspede (só aparece quando preenchido) -->
+          <div id="guest-balance-info" style="display:none" class="guest-balance-info-box"></div>
 
           <!-- Carrinho -->
           <div id="cart-items-section" style="display:none">
@@ -225,8 +236,12 @@
       <!-- Tab Check-Ins -->
       <div id="tab-checkins" class="tab-content">
         <div class="checkouts-toolbar">
-          <input type="text" id="filter-checkin-name" class="input-neon input-sm" placeholder="Buscar por hóspede…">
-          <input type="text" id="filter-checkin-room" class="input-neon input-sm" placeholder="Filtrar por quarto…">
+          <input type="text" id="filter-checkin-name" class="input-neon input-sm"
+                 placeholder="Buscar por hóspede…"
+                 data-i18n="filter_checkin_name_ph" data-i18n-attr="placeholder">
+          <input type="text" id="filter-checkin-room" class="input-neon input-sm"
+                 placeholder="Filtrar por quarto…"
+                 data-i18n="filter_checkin_room_ph" data-i18n-attr="placeholder">
         </div>
         <div id="checkins-list">
           <div class="empty-state"><div class="empty-state-icon">🏨</div><p>Nenhuma reserva ativa.</p></div>
@@ -236,10 +251,12 @@
       <!-- Tab Check-Outs -->
       <div id="tab-checkouts" class="tab-content">
         <div class="checkouts-toolbar">
-          <input type="text" id="filter-room" class="input-neon input-sm" placeholder="Filtrar por quarto…">
+          <input type="text" id="filter-room" class="input-neon input-sm"
+                 placeholder="Filtrar por quarto…"
+                 data-i18n="filter_checkout_room_ph" data-i18n-attr="placeholder">
           <input type="datetime-local" id="filter-date" class="input-neon input-sm">
-          <button id="btn-export-excel" class="btn-secondary">Exportar Excel</button>
-          <button id="btn-clear-day" class="btn-danger btn-sm">🗑 Limpar Dados do Dia</button>
+          <button id="btn-export-excel" class="btn-secondary" data-i18n="exportar_excel">Exportar Excel</button>
+          <button id="btn-clear-day" class="btn-danger btn-sm" data-i18n="btn_limpar_dia">🗑 Limpar Dados do Dia</button>
         </div>
         <div id="checkouts-list">
           <div class="empty-state"><div class="empty-state-icon">📋</div><p>Nenhum check-out registrado.</p></div>
@@ -249,8 +266,10 @@
       <!-- Tab Produtos -->
       <div id="tab-products" class="tab-content">
         <div class="checkouts-toolbar">
-          <input type="text" id="filter-prod-admin" class="input-neon input-sm" placeholder="Buscar produto…">
-          <button id="btn-new-product" class="btn-secondary" style="display:none;white-space:nowrap">+ Novo Produto</button>
+          <input type="text" id="filter-prod-admin" class="input-neon input-sm"
+                 placeholder="Buscar produto…"
+                 data-i18n="filter_prod_ph" data-i18n-attr="placeholder">
+          <button id="btn-new-product" class="btn-secondary" style="display:none;white-space:nowrap" data-i18n="novo_produto">+ Novo Produto</button>
         </div>
         <div id="products-admin-grid">
           <div class="empty-state"><div class="empty-state-icon">📦</div><p>Nenhum produto cadastrado.</p></div>
@@ -260,7 +279,9 @@
       <!-- Tab Pagamentos -->
       <div id="tab-payments" class="tab-content">
         <div class="checkouts-toolbar">
-          <input type="text" id="filter-payment" class="input-neon input-sm" placeholder="Filtrar por quarto ou hóspede…">
+          <input type="text" id="filter-payment" class="input-neon input-sm"
+                 placeholder="Filtrar por quarto ou hóspede…"
+                 data-i18n="filter_payment_ph" data-i18n-attr="placeholder">
           <select id="filter-payment-status" class="input-neon input-sm" style="max-width:150px">
             <option value="approved" data-i18n="status_aprovados">Aprovados</option>
             <option value=""         data-i18n="status_todos">Todos</option>
@@ -270,7 +291,7 @@
           <select id="filter-payment-method" class="input-neon input-sm" style="max-width:150px">
             <option value=""             data-i18n="todos_metodos">Todos os métodos</option>
             <option value="pix">PIX</option>
-            <option value="credit_card">Cartão</option>
+            <option value="credit_card" data-i18n="cartao_method">Cartão</option>
           </select>
         </div>
         <div id="payments-list">
@@ -281,10 +302,12 @@
       <!-- Tab Histórico -->
       <div id="tab-history" class="tab-content">
         <div class="checkouts-toolbar">
-          <input type="text" id="filter-history" class="input-neon input-sm" placeholder="Buscar quarto ou hóspede…">
+          <input type="text" id="filter-history" class="input-neon input-sm"
+                 placeholder="Buscar quarto ou hóspede…"
+                 data-i18n="filter_rooms_ph" data-i18n-attr="placeholder">
           <input type="date" id="filter-history-from" class="input-neon input-sm" title="De:">
           <input type="date" id="filter-history-to"   class="input-neon input-sm" title="Até:">
-          <button id="btn-export-history" class="btn-secondary">Exportar Excel</button>
+          <button id="btn-export-history" class="btn-secondary" data-i18n="exportar_excel">Exportar Excel</button>
         </div>
         <div id="history-list">
           <div class="empty-state"><div class="empty-state-icon">📜</div><p>Nenhum check-out no histórico.</p></div>
@@ -295,14 +318,14 @@
       <div id="tab-upload" class="tab-content">
         <div id="last-upload-card" class="last-upload-card surface" style="display:none">
           <div id="last-upload-info" style="font-size:.88rem;color:var(--text-sub)"></div>
-          <button id="btn-undo-upload" class="btn-danger btn-sm">🗑 Remover Quartos</button>
+          <button id="btn-undo-upload" class="btn-danger btn-sm" data-i18n="remover_quartos">🗑 Remover Quartos</button>
         </div>
 
         <div class="upload-card surface">
-          <h3>Importar Reservas</h3>
-          <p>Importe um arquivo Excel com as reservas. Os quartos anteriores serão removidos e substituídos pelos do novo arquivo. Os comprovantes de pagamento são sempre preservados.</p>
+          <h3 data-i18n="importar_reservas">Importar Reservas</h3>
+          <p data-i18n="upload_desc">Importe um arquivo Excel com as reservas.</p>
           <div class="upload-format">
-            <h4>Colunas esperadas</h4>
+            <h4 data-i18n="colunas_esperadas">Colunas esperadas</h4>
             <div class="format-columns">
               <span class="col-tag">RSV</span>
               <span class="col-tag">NOME</span>
@@ -315,15 +338,15 @@
           <div id="upload-area" class="upload-area">
             <input type="file" id="excel-file" accept=".xlsx,.xls" style="display:none">
             <div class="upload-icon">📂</div>
-            <p>Clique ou arraste o arquivo aqui</p>
-            <span class="upload-hint">.xlsx ou .xls</span>
+            <p data-i18n="upload_drag">Clique ou arraste o arquivo aqui</p>
+            <span class="upload-hint" data-i18n="upload_hint_ext">.xlsx ou .xls</span>
           </div>
           <div id="upload-preview" class="upload-preview" style="display:none">
-            <h4>Prévia dos dados</h4>
+            <h4 data-i18n="preview_title">Prévia dos dados</h4>
             <div id="preview-table-container" class="table-container"></div>
             <div class="upload-actions">
-              <button id="btn-cancel-upload" class="btn-ghost">Cancelar</button>
-              <button id="btn-confirm-upload" class="btn-primary" style="max-width:200px">Confirmar Upload</button>
+              <button id="btn-cancel-upload" class="btn-ghost" data-i18n="cancelar">Cancelar</button>
+              <button id="btn-confirm-upload" class="btn-primary" style="max-width:200px" data-i18n="confirmar_upload_btn">Confirmar Upload</button>
             </div>
           </div>
         </div>
@@ -340,15 +363,15 @@
         <button id="close-product-modal" class="btn-close">✕</button>
       </div>
       <div class="form-group">
-        <label>Nome do Produto</label>
+        <label data-i18n="th_nome">Nome do Produto</label>
         <input type="text" id="prod-name" class="input-neon" placeholder="Ex: Água Mineral 500ml">
       </div>
       <div class="form-group">
-        <label>Descrição</label>
+        <label data-i18n="th_descricao">Descrição</label>
         <input type="text" id="prod-desc" class="input-neon" placeholder="Ex: Gelada, 500ml">
       </div>
       <div class="form-group">
-        <label>Preço (R$)</label>
+        <label data-i18n="th_preco">Preço (R$)</label>
         <input type="number" id="prod-price" class="input-neon" placeholder="0,00" min="0.01" step="0.01" inputmode="decimal">
       </div>
       <div class="form-group">
@@ -372,9 +395,9 @@
       </div>
       <input type="hidden" id="prod-edit-id" value="">
       <div class="modal-actions">
-        <button id="btn-delete-product" class="btn-danger" style="display:none;margin-right:auto">Excluir</button>
-        <button id="btn-cancel-product" class="btn-ghost">Cancelar</button>
-        <button id="btn-save-product" class="btn-primary" style="max-width:160px">Salvar</button>
+        <button id="btn-delete-product" class="btn-danger" style="display:none;margin-right:auto" data-i18n="excluir">Excluir</button>
+        <button id="btn-cancel-product" class="btn-ghost" data-i18n="cancelar">Cancelar</button>
+        <button id="btn-save-product" class="btn-primary" style="max-width:160px" data-i18n="salvar">Salvar</button>
       </div>
     </div>
   </div>
@@ -393,28 +416,40 @@
       </div>
       <div class="form-group">
         <label data-i18n="categoria">Categoria</label>
+        <p style="font-size:.72rem;color:var(--text-dim);margin:-4px 0 8px">Selecione uma ou mais categorias</p>
         <div class="category-chips" id="room-edit-category-chips">
-          <button type="button" class="chip-btn active" data-cat="">Geral</button>
-          <button type="button" class="chip-btn" data-cat="diarias">Diárias</button>
-          <button type="button" class="chip-btn" data-cat="frigobar">Frigobar</button>
-          <button type="button" class="chip-btn" data-cat="room_service">Room Service</button>
-          <button type="button" class="chip-btn" data-cat="lavanderia">Lavanderia</button>
-          <button type="button" class="chip-btn" data-cat="restaurante">Restaurante</button>
-          <button type="button" class="chip-btn" data-cat="outros">Outros</button>
+          <button type="button" class="chip-btn active" data-cat="" data-i18n="cat_geral">Geral</button>
+          <button type="button" class="chip-btn" data-cat="diarias" data-i18n="cat_diarias">Diárias</button>
+          <button type="button" class="chip-btn" data-cat="frigobar" data-i18n="cat_frigobar">Frigobar</button>
+          <button type="button" class="chip-btn" data-cat="room_service" data-i18n="cat_room_service">Room Service</button>
+          <button type="button" class="chip-btn" data-cat="lavanderia" data-i18n="cat_lavanderia">Lavanderia</button>
+          <button type="button" class="chip-btn" data-cat="restaurante" data-i18n="cat_restaurante">Restaurante</button>
+          <button type="button" class="chip-btn" data-cat="outros" data-i18n="cat_outros">Outros</button>
         </div>
       </div>
       <div class="form-group">
-        <label data-i18n="observacoes">Observações (opcional)</label>
-        <textarea id="room-edit-obs" class="input-neon" rows="2"
-                  placeholder="Ex: Frigobar + minibar aberto"
-                  style="resize:vertical;min-height:60px"
-                  data-i18n="obs_placeholder" data-i18n-attr="placeholder"></textarea>
+        <label data-i18n="obs_interna">Obs. Interna (só admin)</label>
+        <textarea id="room-edit-obs-internal" class="input-neon" rows="2"
+                  placeholder="Motivo do ajuste, detalhes internos…"
+                  style="resize:vertical;min-height:56px"
+                  data-i18n="obs_interna_ph" data-i18n-attr="placeholder"></textarea>
+      </div>
+      <div class="form-group">
+        <label data-i18n="obs_hospede">Mensagem para o Hóspede (opcional)</label>
+        <textarea id="room-edit-obs-guest" class="input-neon" rows="2"
+                  placeholder="Ex: Frigobar consumido no dia 12…"
+                  style="resize:vertical;min-height:56px"
+                  data-i18n="obs_hospede_ph" data-i18n-attr="placeholder"></textarea>
       </div>
       <div class="form-group">
         <label style="display:flex;align-items:flex-start;gap:10px;text-transform:none;letter-spacing:0;font-size:.9rem;cursor:pointer;line-height:1.4">
           <input type="checkbox" id="room-edit-reception" style="width:17px;height:17px;margin-top:2px;accent-color:var(--danger);flex-shrink:0">
           <span data-i18n="requer_recepcao">Requer atendimento na recepção (bloqueia self-checkout)</span>
         </label>
+      </div>
+      <div id="room-edit-history" style="display:none;margin-top:4px">
+        <div class="section-label" style="font-size:.73rem;margin-bottom:4px;opacity:.8" data-i18n="historico_edicoes">Histórico de Edições</div>
+        <div id="room-edit-history-list" class="edit-history-wrap"></div>
       </div>
       <input type="hidden" id="room-edit-id" value="">
       <div class="modal-actions">
@@ -493,12 +528,12 @@
   <!-- ══ PAINEL NOTIFICAÇÕES ═══════════════════════════════════════════════ -->
   <div id="notification-panel" class="notification-panel" style="display:none">
     <div class="panel-header">
-      <h4>Notificações</h4>
-      <button id="btn-mark-all-read" class="btn-ghost btn-sm">Marcar lidas</button>
+      <h4 data-i18n="notificacoes">Notificações</h4>
+      <button id="btn-mark-all-read" class="btn-ghost btn-sm" data-i18n="marcar_lidas">Marcar lidas</button>
       <button id="close-notifications" class="btn-close">✕</button>
     </div>
     <div id="notifications-list" class="notifications-list">
-      <div class="notif-empty">Sem notificações</div>
+      <div class="notif-empty" data-i18n="sem_notificacoes">Sem notificações</div>
     </div>
   </div>
 
