@@ -13,17 +13,23 @@
 
   <!-- ══ NAVBAR ══════════════════════════════════════════════════════════ -->
   <nav class="navbar">
-    <div class="nav-logo">
+    <div class="nav-logo" id="nav-logo-btn" style="cursor:pointer">
       <span class="nav-logo-text">Fast Check-Out</span>
       <span class="nav-logo-sub">Hotel · Digital</span>
     </div>
     <div class="nav-actions">
+      <div class="lang-switcher">
+        <button class="lang-btn active" data-lang="pt" title="Português">🇧🇷</button>
+        <button class="lang-btn" data-lang="en" title="English">🇺🇸</button>
+        <button class="lang-btn" data-lang="es" title="Español">🇪🇸</button>
+        <button class="lang-btn" data-lang="zh" title="中文">🇨🇳</button>
+      </div>
       <button id="btn-notifications" class="btn-icon" style="display:none" title="Notificações">
         <span>🔔</span>
         <span id="notification-badge" class="badge" style="display:none">0</span>
       </button>
-      <button id="btn-admin-login" class="btn-ghost">Área Admin</button>
-      <button id="btn-admin-logout" class="btn-ghost" style="display:none">Sair</button>
+      <button id="btn-admin-login" class="btn-ghost" data-i18n="area_admin">Área Admin</button>
+      <button id="btn-admin-logout" class="btn-ghost" style="display:none" data-i18n="sair">Sair</button>
     </div>
   </nav>
 
@@ -34,37 +40,57 @@
     <section id="guest-view" class="view">
 
       <div class="hero">
-        <p class="hero-eyebrow">Hotel · Check-Out Digital</p>
-        <h1>Consulte seu saldo<br>e faça o check-out</h1>
+        <p class="hero-eyebrow" data-i18n="hero_eyebrow">Hotel · Check-Out Digital</p>
+        <h1 data-i18n="hero_title">Consulte seu saldo<br>e faça o check-out</h1>
         <div class="gold-line"></div>
       </div>
 
       <!-- Busca -->
       <form class="guest-search-card surface" autocomplete="off" onsubmit="return false">
-        <h2>Identificação do Hóspede</h2>
+        <h2 data-i18n="search_title">Identificação do Hóspede</h2>
         <div class="form-group">
-          <label>Nome ou Sobrenome</label>
-          <input type="text" id="guest-name" class="input-neon" placeholder="Digite seu nome…"
-                 autocomplete="off" name="guest_search_name" spellcheck="false">
+          <label data-i18n="name_label">Nome ou Sobrenome</label>
+          <input type="text" id="guest-name" class="input-neon"
+                 placeholder="Digite seu nome…" autocomplete="off"
+                 name="guest_search_name" spellcheck="false"
+                 data-i18n="name_placeholder" data-i18n-attr="placeholder">
         </div>
         <div class="form-group">
-          <label>Número do Quarto</label>
-          <input type="text" id="guest-room" class="input-neon" placeholder="Ex: 101"
-                 autocomplete="off" name="guest_search_room" inputmode="numeric" spellcheck="false">
+          <label data-i18n="room_label">Número do Quarto</label>
+          <input type="text" id="guest-room" class="input-neon"
+                 placeholder="Ex: 101" autocomplete="off"
+                 name="guest_search_room" inputmode="numeric" spellcheck="false"
+                 data-i18n="room_placeholder" data-i18n-attr="placeholder">
         </div>
-        <button id="btn-search-guest" class="btn-primary" type="button">Consultar Saldo</button>
+        <button id="btn-search-guest" class="btn-primary" type="button" data-i18n="search_btn">Consultar Saldo</button>
       </form>
 
       <!-- Check-out success banner -->
       <div id="checkout-success-banner" style="display:none">
         <div class="checkout-success-wrap surface led-surface">
           <div class="checkout-success-icon">🏨</div>
-          <p class="checkout-success-eyebrow">Check-Out Concluído</p>
-          <h2 class="checkout-success-title">Até logo!</h2>
+          <p class="checkout-success-eyebrow" data-i18n="checkout_concluido">Check-Out Concluído</p>
+          <h2 class="checkout-success-title" data-i18n="ate_logo">Até logo!</h2>
           <div class="checkout-success-line"></div>
           <p id="checkout-success-room" style="color:var(--text-sub);font-size:.95rem;margin-bottom:4px"></p>
-          <p style="color:var(--text-sub);font-size:.88rem;margin-bottom:32px">Obrigado pela sua estadia.</p>
-          <button id="btn-new-checkout" class="btn-primary" style="max-width:260px">Novo Check-Out</button>
+          <p data-i18n="obrigado" style="color:var(--text-sub);font-size:.88rem;margin-bottom:32px">Obrigado pela sua estadia.</p>
+          <button id="btn-new-checkout" class="btn-primary" style="max-width:260px" data-i18n="novo_checkout">Novo Check-Out</button>
+        </div>
+      </div>
+
+      <!-- Reception Alert -->
+      <div id="reception-alert-view" style="display:none">
+        <div class="reception-alert-card surface led-surface">
+          <div class="reception-alert-icon">🏨</div>
+          <h2 data-i18n="comparecer_recepcao">Dirija-se à Recepção</h2>
+          <div class="gold-line"></div>
+          <p data-i18n="msg_recepcao" style="color:var(--text-sub);font-size:.92rem;margin:16px 0 28px;text-align:center;max-width:340px">
+            Sua reserva requer atendimento na recepção. Por favor, compareça ao balcão ou ligue para a recepção.
+          </p>
+          <div style="display:flex;flex-direction:column;gap:10px;width:100%;max-width:280px">
+            <button id="btn-call-reception" class="btn-primary" data-i18n="btn_recepcao">📞 Ligar para Recepção</button>
+            <button id="btn-back-from-reception" class="btn-ghost" data-i18n="voltar">Voltar</button>
+          </div>
         </div>
       </div>
 
@@ -75,7 +101,7 @@
           <!-- Cabeçalho -->
           <div class="room-header">
             <div class="room-number-badge">
-              <span>Quarto</span>
+              <span data-i18n="room_badge">Quarto</span>
               <strong id="display-room-number">101</strong>
             </div>
             <div class="guest-info">
@@ -86,21 +112,23 @@
 
           <!-- Saldo -->
           <div class="balance-display">
-            <span class="balance-label">Saldo Devedor</span>
+            <span class="balance-label" data-i18n="saldo_devedor">Saldo Devedor</span>
             <span id="display-balance" class="balance-amount neon-pink">R$ 0,00</span>
           </div>
 
           <!-- Carrinho -->
           <div id="cart-items-section" style="display:none">
-            <div class="section-label">Carrinho</div>
+            <div class="section-label" data-i18n="carrinho">Carrinho</div>
             <div id="cart-items-list"></div>
           </div>
 
           <!-- Catálogo de Produtos -->
           <div id="products-section" class="products-section" style="display:none">
-            <div class="section-label">Consumo &amp; Serviços</div>
+            <div class="section-label" data-i18n="consumo">Consumo &amp; Serviços</div>
             <div class="prod-search-row">
-              <input type="text" id="product-search" class="input-neon input-sm" placeholder="🔍 Buscar produto…" autocomplete="off">
+              <input type="text" id="product-search" class="input-neon input-sm"
+                     placeholder="🔍 Buscar produto…" autocomplete="off"
+                     data-i18n="buscar_produto" data-i18n-attr="placeholder">
             </div>
             <div id="products-grid-guest" class="products-grid-guest">
               <div class="prod-loading"><div class="spinner" style="width:22px;height:22px;margin:0"></div><span>Carregando…</span></div>
@@ -110,7 +138,7 @@
           <!-- Pagamento -->
           <div id="payment-section" class="payment-section" style="display:none">
             <div class="payment-total">
-              <span style="color:var(--text-sub)">Total a Pagar</span>
+              <span data-i18n="total_a_pagar" style="color:var(--text-sub)">Total a Pagar</span>
               <strong id="payment-total-amount">R$ 0,00</strong>
             </div>
             <div class="payment-buttons">
@@ -119,20 +147,21 @@
                   <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
                   <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
                 </svg>
-                Pagar com PIX
+                <span data-i18n="pagar_pix">Pagar com PIX</span>
               </button>
               <button id="btn-pay-card" class="btn-card">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/>
                 </svg>
-                Cartão / Google Pay
+                <span data-i18n="pagar_cartao">Cartão / Google Pay</span>
               </button>
             </div>
           </div>
 
           <!-- Check-out (saldo = 0) -->
           <div id="checkout-section" class="checkout-section" style="display:none">
-            <button id="btn-checkout" class="btn-checkout">Realizar Check-Out</button>
+            <button id="btn-checkout" class="btn-checkout" data-i18n="realizar_checkout">Realizar Check-Out</button>
+            <button id="btn-guest-receipt" class="btn-ghost" style="display:none;margin-top:8px;font-size:.88rem" data-i18n="imprimir_comprovante">🧾 Comprovante</button>
           </div>
 
         </div>
@@ -144,18 +173,18 @@
       <div class="login-card surface">
         <div class="login-header">
           <div class="login-icon">🔐</div>
-          <h2>Acesso Administrativo</h2>
+          <h2 data-i18n="acesso_admin">Acesso Administrativo</h2>
         </div>
         <div class="form-group">
-          <label>E-mail</label>
+          <label data-i18n="email_label">E-mail</label>
           <input type="email" id="admin-email" class="input-neon" placeholder="admin@hotel.com" autocomplete="email">
         </div>
         <div class="form-group">
-          <label>Senha</label>
+          <label data-i18n="senha_label">Senha</label>
           <input type="password" id="admin-password" class="input-neon" placeholder="••••••••" autocomplete="current-password">
         </div>
-        <button id="btn-login" class="btn-primary" style="margin-bottom:12px">Entrar</button>
-        <button id="btn-back-guest" class="btn-ghost" style="width:100%;text-align:center">← Voltar</button>
+        <button id="btn-login" class="btn-primary" style="margin-bottom:12px" data-i18n="entrar">Entrar</button>
+        <button id="btn-back-guest" class="btn-ghost" style="width:100%;text-align:center" data-i18n="voltar_btn">← Voltar</button>
       </div>
     </section>
 
@@ -163,20 +192,31 @@
     <section id="admin-dashboard-view" class="view">
 
       <div class="dashboard-header">
-        <h2>Dashboard</h2>
+        <h2 data-i18n="dashboard">Dashboard</h2>
         <div class="admin-tabs">
-          <button class="tab-btn active" data-tab="rooms">Quartos</button>
-          <button class="tab-btn" data-tab="checkins">Check-Ins</button>
-          <button class="tab-btn" data-tab="checkouts">Check-Outs</button>
-          <button class="tab-btn" data-tab="products">Produtos</button>
-          <button class="tab-btn" data-tab="payments">Pagamentos</button>
-          <button class="tab-btn" data-tab="history">Histórico</button>
-          <button class="tab-btn" data-tab="upload">Upload</button>
+          <button class="tab-btn active" data-tab="rooms"     data-i18n="tab_quartos">Quartos</button>
+          <button class="tab-btn"        data-tab="checkins"  data-i18n="tab_checkins">Check-Ins</button>
+          <button class="tab-btn"        data-tab="checkouts" data-i18n="tab_checkouts">Check-Outs</button>
+          <button class="tab-btn"        data-tab="products"  data-i18n="tab_produtos">Produtos</button>
+          <button class="tab-btn"        data-tab="payments"  data-i18n="tab_pagamentos">Pagamentos</button>
+          <button class="tab-btn"        data-tab="history"   data-i18n="tab_historico">Histórico</button>
+          <button class="tab-btn"        data-tab="upload"    data-i18n="tab_upload">Upload</button>
         </div>
       </div>
 
       <!-- Tab Quartos -->
       <div id="tab-rooms" class="tab-content active">
+        <div class="checkouts-toolbar rooms-filter-bar">
+          <input type="text" id="filter-rooms-text" class="input-neon input-sm"
+                 placeholder="Buscar quarto ou hóspede…"
+                 data-i18n="filter_rooms_ph" data-i18n-attr="placeholder">
+          <select id="sort-rooms" class="input-neon input-sm" style="max-width:190px">
+            <option value="number"       data-i18n="sort_quarto">Quarto ↑</option>
+            <option value="balance-desc" data-i18n="sort_maior_saldo">Maior Saldo</option>
+            <option value="balance-asc"  data-i18n="sort_menor_saldo">Menor Saldo</option>
+            <option value="name"         data-i18n="sort_nome">Nome A-Z</option>
+          </select>
+        </div>
         <div id="rooms-grid" class="rooms-grid">
           <div class="empty-state"><div class="empty-state-icon">🏨</div><p>Carregando quartos…</p></div>
         </div>
@@ -221,8 +261,14 @@
       <div id="tab-payments" class="tab-content">
         <div class="checkouts-toolbar">
           <input type="text" id="filter-payment" class="input-neon input-sm" placeholder="Filtrar por quarto ou hóspede…">
-          <select id="filter-payment-method" class="input-neon input-sm" style="max-width:160px">
-            <option value="">Todos os métodos</option>
+          <select id="filter-payment-status" class="input-neon input-sm" style="max-width:150px">
+            <option value="approved" data-i18n="status_aprovados">Aprovados</option>
+            <option value=""         data-i18n="status_todos">Todos</option>
+            <option value="pending"  data-i18n="status_pendentes">Pendentes</option>
+            <option value="rejected" data-i18n="status_recusados">Recusados</option>
+          </select>
+          <select id="filter-payment-method" class="input-neon input-sm" style="max-width:150px">
+            <option value=""             data-i18n="todos_metodos">Todos os métodos</option>
             <option value="pix">PIX</option>
             <option value="credit_card">Cartão</option>
           </select>
@@ -232,8 +278,6 @@
         </div>
       </div>
 
-      <!-- Tab Upload -->
-      <div id="tab-upload" class="tab-content">
       <!-- Tab Histórico -->
       <div id="tab-history" class="tab-content">
         <div class="checkouts-toolbar">
@@ -247,6 +291,8 @@
         </div>
       </div>
 
+      <!-- Tab Upload -->
+      <div id="tab-upload" class="tab-content">
         <div id="last-upload-card" class="last-upload-card surface" style="display:none">
           <div id="last-upload-info" style="font-size:.88rem;color:var(--text-sub)"></div>
           <button id="btn-undo-upload" class="btn-danger btn-sm">🗑 Remover Quartos</button>
@@ -333,41 +379,93 @@
     </div>
   </div>
 
+  <!-- ══ MODAL EDITAR RESERVA (admin) ═════════════════════════════════════ -->
+  <div id="room-edit-modal" class="modal-overlay" style="display:none">
+    <div class="modal-card" style="max-width:520px">
+      <div class="modal-header">
+        <h3 data-i18n="editar_reserva">Editar Reserva</h3>
+        <button id="close-room-edit-modal" class="btn-close">✕</button>
+      </div>
+      <div id="room-edit-header"></div>
+      <div class="form-group">
+        <label data-i18n="saldo_devedor_edit">Saldo Devedor (R$)</label>
+        <input type="number" id="room-edit-balance" class="input-neon" placeholder="0,00" min="0" step="0.01" inputmode="decimal">
+      </div>
+      <div class="form-group">
+        <label data-i18n="categoria">Categoria</label>
+        <div class="category-chips" id="room-edit-category-chips">
+          <button type="button" class="chip-btn active" data-cat="">Geral</button>
+          <button type="button" class="chip-btn" data-cat="diarias">Diárias</button>
+          <button type="button" class="chip-btn" data-cat="frigobar">Frigobar</button>
+          <button type="button" class="chip-btn" data-cat="room_service">Room Service</button>
+          <button type="button" class="chip-btn" data-cat="lavanderia">Lavanderia</button>
+          <button type="button" class="chip-btn" data-cat="restaurante">Restaurante</button>
+          <button type="button" class="chip-btn" data-cat="outros">Outros</button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label data-i18n="observacoes">Observações (opcional)</label>
+        <textarea id="room-edit-obs" class="input-neon" rows="2"
+                  placeholder="Ex: Frigobar + minibar aberto"
+                  style="resize:vertical;min-height:60px"
+                  data-i18n="obs_placeholder" data-i18n-attr="placeholder"></textarea>
+      </div>
+      <div class="form-group">
+        <label style="display:flex;align-items:flex-start;gap:10px;text-transform:none;letter-spacing:0;font-size:.9rem;cursor:pointer;line-height:1.4">
+          <input type="checkbox" id="room-edit-reception" style="width:17px;height:17px;margin-top:2px;accent-color:var(--danger);flex-shrink:0">
+          <span data-i18n="requer_recepcao">Requer atendimento na recepção (bloqueia self-checkout)</span>
+        </label>
+      </div>
+      <input type="hidden" id="room-edit-id" value="">
+      <div class="modal-actions">
+        <button id="btn-cancel-room-edit" class="btn-ghost" data-i18n="cancelar">Cancelar</button>
+        <button id="btn-save-room-edit" class="btn-primary" style="max-width:160px" data-i18n="salvar">Salvar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ══ MODAL PIX ════════════════════════════════════════════════════════ -->
   <div id="pix-modal" class="modal-overlay" style="display:none">
     <div class="modal-card">
       <div class="modal-header">
-        <h3>Pagamento via PIX</h3>
+        <h3 data-i18n="pix_title">Pagamento via PIX</h3>
         <button id="close-pix-modal" class="btn-close">✕</button>
       </div>
       <div class="pix-amount">
-        <span style="color:var(--text-sub)">Total</span>
+        <span data-i18n="pix_total" style="color:var(--text-sub)">Total</span>
         <strong id="pix-amount-display">R$ 0,00</strong>
       </div>
       <div id="pix-loading" style="text-align:center;padding:44px 0">
         <div class="spinner"></div>
-        <p style="margin-top:16px;color:var(--text-sub);font-size:.88rem">Gerando código PIX…</p>
+        <p data-i18n="pix_gerando" style="margin-top:16px;color:var(--text-sub);font-size:.88rem">Gerando código PIX…</p>
       </div>
       <div id="pix-qr-content" style="display:none;text-align:center">
         <canvas id="pix-qr-canvas"></canvas>
         <div class="pix-code-container">
-          <p>Código PIX (Copia e Cola):</p>
+          <p data-i18n="pix_codigo">Código PIX (Copia e Cola):</p>
           <div class="pix-code-box">
             <span id="pix-code-text"></span>
-            <button id="btn-copy-pix" class="btn-copy">Copiar</button>
+            <button id="btn-copy-pix" class="btn-copy" data-i18n="pix_copiar">Copiar</button>
           </div>
         </div>
         <div class="pix-waiting">
           <div class="pix-pulse"></div>
-          <span>Aguardando confirmação do pagamento…</span>
+          <span data-i18n="pix_aguardando">Aguardando confirmação do pagamento…</span>
         </div>
       </div>
       <div id="pix-success" class="pix-success" style="display:none">
         <div class="success-icon">✅</div>
-        <h3>Pagamento Confirmado</h3>
-        <p>Saldo zerado. Você pode realizar o check-out agora.</p>
-        <button class="btn-checkout" style="margin-top:20px" onclick="document.getElementById('pix-modal').style.display='none'">
+        <h3 data-i18n="pix_confirmado">Pagamento Confirmado</h3>
+        <p data-i18n="pix_saldo_zerado">Saldo zerado. Você pode realizar o check-out agora.</p>
+        <button class="btn-checkout" style="margin-top:20px"
+                onclick="document.getElementById('pix-modal').style.display='none'"
+                data-i18n="pix_ir_checkout">
           Ir para Check-Out
+        </button>
+        <button class="btn-ghost" style="margin-top:10px;font-size:.88rem"
+                onclick="printGuestReceipt()"
+                data-i18n="imprimir_comprovante">
+          🧾 Comprovante
         </button>
       </div>
     </div>
@@ -377,17 +475,17 @@
   <div id="checkout-modal" class="modal-overlay" style="display:none">
     <div class="modal-card">
       <div class="modal-header">
-        <h3>Confirmar Check-Out</h3>
+        <h3 data-i18n="confirmar_checkout">Confirmar Check-Out</h3>
       </div>
-      <p style="color:var(--text-sub);font-size:.9rem;margin-bottom:4px">Confirma o encerramento da sua estadia?</p>
+      <p data-i18n="confirmar_encerramento" style="color:var(--text-sub);font-size:.9rem;margin-bottom:4px">Confirma o encerramento da sua estadia?</p>
       <div class="checkout-summary">
         <div>Quarto: <strong id="checkout-room-display"></strong></div>
         <div>Hóspede: <strong id="checkout-guest-display"></strong></div>
         <div>Saldo: <strong style="color:var(--success)">R$ 0,00</strong></div>
       </div>
       <div class="modal-actions">
-        <button id="btn-cancel-checkout" class="btn-ghost">Cancelar</button>
-        <button id="btn-confirm-checkout" class="btn-checkout" style="max-width:200px">Confirmar</button>
+        <button id="btn-cancel-checkout" class="btn-ghost" data-i18n="cancelar">Cancelar</button>
+        <button id="btn-confirm-checkout" class="btn-checkout" style="max-width:200px" data-i18n="confirmar">Confirmar</button>
       </div>
     </div>
   </div>
@@ -416,6 +514,7 @@
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
   <script src="js/config.js"></script>
+  <script src="js/translations.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

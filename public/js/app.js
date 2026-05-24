@@ -19,6 +19,9 @@ const state = {
   allProducts:           [],
   allPayments:           [],
   allHistory:            [],
+  lastPaidRoom:          null,
+  lastPaidItems:         [],
+  lastPaidBalance:       0,
   pixUnsubscribe:        null,
   roomsUnsubscribe:      null,
   notifUnsubscribe:      null,
@@ -51,8 +54,8 @@ function toast(msg, type = 'info', ms = 4500) {
 // ── Views & tabs ───────────────────────────────────────────────────────────
 function showView(id) {
   qsa('.view').forEach(v => v.classList.remove('active'));
-  const t = qs(`#${id}`);
-  if (t) t.classList.add('active');
+  const el = qs(`#${id}`);
+  if (el) el.classList.add('active');
   if (id === 'admin-login-view') {
     const btn = qs('#btn-login');
     if (btn) { btn.textContent = 'Entrar'; btn.disabled = false; }
@@ -74,7 +77,7 @@ function showView(id) {
 function showTab(id) {
   qsa('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === id));
   qsa('.tab-content').forEach(c => c.classList.toggle('active', c.id === `tab-${id}`));
-  // Re-render on tab switch so filter state is fresh
+  if (id === 'rooms')     renderRoomsGrid(state.allRooms);
   if (id === 'checkins')  renderCheckins(state.allRooms);
   if (id === 'products')  renderProductsAdmin(state.allProducts);
   if (id === 'checkouts') renderCheckouts(state.allCheckouts);
@@ -117,7 +120,7 @@ async function login() {
   const pass  = qs('#admin-password').value;
   if (!email || !pass) { toast('Preencha e-mail e senha.', 'warning'); return; }
   const btn = qs('#btn-login');
-  btn.textContent = 'Entrando…';
+  btn.textContent = t('entrando');
   btn.disabled = true;
   try {
     await auth.signInWithEmailAndPassword(email, pass);
@@ -146,7 +149,7 @@ async function searchGuest() {
   if (!name || !roomNum) { toast('Preencha nome e número do quarto.', 'warning'); return; }
 
   const btn = qs('#btn-search-guest');
-  btn.textContent = 'Buscando…';
+  btn.textContent = t('buscando');
   btn.disabled = true;
 
   try {
@@ -168,14 +171,26 @@ async function searchGuest() {
 
     state.foundRoom = matched[0];
     state.cart = [];
+
+    // Check if room requires front-desk attendance
+    if (state.foundRoom.requiresReception) {
+      qs('.guest-search-card').style.display = 'none';
+      qs('#guest-balance-view').style.display = 'none';
+      qs('#reception-alert-view').style.display = '';
+      qs('#reception-alert-view').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+
     renderGuestBalance(state.foundRoom);
     // Show product catalog
     qs('#products-section').style.display = '';
     renderProductsGuest(state.allProducts);
+    // Mobile: auto-scroll to balance section
+    setTimeout(() => qs('#guest-balance-view')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
   } catch (err) {
     toast('Erro ao buscar quarto: ' + err.message, 'error');
   } finally {
-    btn.textContent = 'Consultar';
+    btn.textContent = t('search_btn');
     btn.disabled = false;
   }
 }
@@ -490,6 +505,14 @@ async function startPixPayment() {
 
 function onPaymentApproved() {
   if (state.pixUnsubscribe) { state.pixUnsubscribe(); state.pixUnsubscribe = null; }
+
+  // Save for guest receipt before clearing state
+  if (state.foundRoom) {
+    state.lastPaidRoom    = { ...state.foundRoom };
+    state.lastPaidItems   = [...state.cart];
+    state.lastPaidBalance = state.foundRoom.balance || 0;
+  }
+
   qs('#pix-loading').style.display    = 'none';
   qs('#pix-qr-content').style.display = 'none';
   qs('#pix-success').style.display    = '';
@@ -498,6 +521,11 @@ function onPaymentApproved() {
     state.cart = [];
     renderGuestBalance(state.foundRoom);
   }
+
+  // Show receipt button in checkout section
+  const recBtn = qs('#btn-guest-receipt');
+  if (recBtn) recBtn.style.display = '';
+
   toast('Pagamento PIX confirmado! Você pode fazer o check-out.', 'success', 7000);
 }
 
@@ -539,7 +567,7 @@ function openCheckoutModal() {
 async function confirmCheckout() {
   const room = state.foundRoom;
   const btn  = qs('#btn-confirm-checkout');
-  btn.textContent = 'Processando…';
+  btn.textContent = t('processando');
   btn.disabled = true;
 
   try {
@@ -571,7 +599,7 @@ async function confirmCheckout() {
     showCheckoutSuccess(room);
   } catch (err) {
     toast('Erro ao fazer check-out: ' + err.message, 'error');
-    btn.textContent = 'Confirmar Check-Out';
+    btn.textContent = t('confirmar');
     btn.disabled = false;
   }
 }
@@ -586,9 +614,12 @@ function showCheckoutSuccess(room) {
 
 function resetGuestView() {
   qs('#checkout-success-banner').style.display = 'none';
-  qs('.guest-search-card').style.display = '';
-  qs('#guest-balance-view').style.display = 'none';
-  qs('#products-section').style.display = 'none';
+  qs('#reception-alert-view').style.display    = 'none';
+  qs('.guest-search-card').style.display       = '';
+  qs('#guest-balance-view').style.display      = 'none';
+  qs('#products-section').style.display        = 'none';
+  const recBtn = qs('#btn-guest-receipt');
+  if (recBtn) recBtn.style.display = 'none';
   const gn = qs('#guest-name');   if (gn) gn.value = '';
   const gr = qs('#guest-room');   if (gr) gr.value = '';
   state.foundRoom = null;
@@ -625,15 +656,37 @@ function subscribeRooms() {
 }
 
 function renderRoomsGrid(rooms) {
-  const grid = qs('#rooms-grid');
-  if (!rooms.length) {
-    grid.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🏨</div><p>Nenhum quarto. Use a aba <strong>Upload</strong> para importar reservas.</p></div>';
+  const grid  = qs('#rooms-grid');
+  const textF = (qs('#filter-rooms-text')?.value || '').toLowerCase();
+  const sortF = qs('#sort-rooms')?.value || 'number';
+
+  // Filter
+  let filtered = textF
+    ? rooms.filter(r =>
+        r.roomNumber?.toLowerCase().includes(textF) ||
+        r.guestName?.toLowerCase().includes(textF))
+    : rooms;
+
+  // Sort
+  const sorted = [...filtered].sort((a, b) => {
+    switch (sortF) {
+      case 'balance-desc': return (b.balance || 0) - (a.balance || 0);
+      case 'balance-asc':  return (a.balance || 0) - (b.balance || 0);
+      case 'name':         return (a.guestName || '').localeCompare(b.guestName || '');
+      default: return (a.roomNumber || '').localeCompare(b.roomNumber || '', undefined, { numeric: true });
+    }
+  });
+
+  if (!sorted.length) {
+    grid.innerHTML = rooms.length
+      ? '<div class="empty-state"><div class="empty-state-icon">🔍</div><p>Nenhum quarto encontrado com esse filtro.</p></div>'
+      : '<div class="empty-state"><div class="empty-state-icon">🏨</div><p>Nenhum quarto. Use a aba <strong>Upload</strong> para importar reservas.</p></div>';
     return;
   }
 
-  const active   = rooms.filter(r => r.status === 'active').length;
-  const couted   = rooms.filter(r => r.status === 'checked-out').length;
-  const withBal  = rooms.filter(r => r.status === 'active' && (r.balance || 0) > 0).length;
+  const active  = rooms.filter(r => r.status === 'active').length;
+  const couted  = rooms.filter(r => r.status === 'checked-out').length;
+  const withBal = rooms.filter(r => r.status === 'active' && (r.balance || 0) > 0).length;
 
   const stats = `
     <div style="grid-column:1/-1;display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px">
@@ -642,15 +695,17 @@ function renderRoomsGrid(rooms) {
       <div class="stat-chip"><strong style="color:var(--success)">${couted}</strong><span style="color:var(--text-sub)">check-out</span></div>
     </div>`;
 
-  grid.innerHTML = stats + rooms.map(r => {
+  grid.innerHTML = stats + sorted.map(r => {
     const bal         = r.balance || 0;
     const isOut       = r.status === 'checked-out';
     const cardClass   = isOut ? 'checked-out' : (bal > 0 ? 'has-balance' : 'no-balance');
     const canCheckout = !isOut && bal === 0;
+    const needsRec    = r.requiresReception ? '<span class="flag flag-reception">📞 Recep.</span>' : '';
+    const catLabel    = r.balanceCategory && !isOut ? `<span class="flag flag-cat">${r.balanceCategory}</span>` : '';
     const balLabel    = isOut
       ? '<span style="color:var(--success)">Saída</span>'
       : `<span style="color:${bal > 0 ? 'var(--warn)' : 'var(--success)'}">${R$(bal)}</span>`;
-    return `<div class="room-card ${cardClass}">
+    return `<div class="room-card ${cardClass}${r.requiresReception ? ' needs-reception' : ''}">
       <div class="room-card-num">${r.roomNumber}</div>
       <div class="room-card-name">${r.guestName}</div>
       <div class="room-card-rsv">RSV: ${r.rsv || '—'}</div>
@@ -658,17 +713,23 @@ function renderRoomsGrid(rooms) {
       <div class="room-card-flags">
         ${r.debit   ? '<span class="flag flag-debit">Débito</span>'  : ''}
         ${r.invoice ? '<span class="flag flag-invoice">Fatura</span>' : ''}
+        ${needsRec}${catLabel}
       </div>
+      ${r.observations ? `<div class="room-card-obs">${r.observations}</div>` : ''}
       <div class="room-card-actions">
         <button class="btn-admin-checkout" data-id="${r.id}" ${!canCheckout ? 'disabled' : ''}>
           ${isOut ? '✅ Feito' : (bal > 0 ? '⚠ Saldo pend.' : 'Check-Out')}
         </button>
+        ${!isOut ? `<button class="btn-room-edit btn-ghost btn-sm" data-id="${r.id}">✏</button>` : ''}
       </div>
     </div>`;
   }).join('');
 
   grid.querySelectorAll('.btn-admin-checkout:not([disabled])').forEach(btn =>
     btn.addEventListener('click', () => adminCheckout(btn.dataset.id))
+  );
+  grid.querySelectorAll('.btn-room-edit').forEach(btn =>
+    btn.addEventListener('click', () => openRoomEdit(btn.dataset.id))
   );
 }
 
@@ -796,6 +857,7 @@ function renderHistory(history) {
   const textF = (qs('#filter-history')?.value || '').toLowerCase();
   const fromF = qs('#filter-history-from')?.value;
   const toF   = qs('#filter-history-to')?.value;
+  const toF   = qs('#filter-history-to')?.value;
 
   let list = history;
   if (textF) list = list.filter(c =>
@@ -846,6 +908,111 @@ function exportHistoryExcel() {
   toast('Histórico exportado!', 'success');
 }
 
+// ── Admin — Room Edit ─────────────────────────────────────────────────────────
+function openRoomEdit(roomId) {
+  const room = state.allRooms.find(r => r.id === roomId);
+  if (!room) return;
+
+  qs('#room-edit-id').value      = roomId;
+  qs('#room-edit-balance').value = room.balance || 0;
+  qs('#room-edit-obs').value     = room.observations || '';
+  qs('#room-edit-reception').checked = room.requiresReception || false;
+
+  qs('#room-edit-header').innerHTML = `
+    <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px;padding:12px 14px;
+                background:var(--glass-1);border-radius:var(--radius-sm);border:1px solid var(--b-subtle)">
+      <div style="font-size:1.5rem;font-weight:700;color:var(--blue-hi);min-width:40px;text-align:center">${room.roomNumber}</div>
+      <div>
+        <div style="font-weight:600">${room.guestName}</div>
+        <div style="color:var(--text-dim);font-size:.8rem">RSV: ${room.rsv || '—'}</div>
+      </div>
+    </div>`;
+
+  const cat = room.balanceCategory || '';
+  qs('#room-edit-category-chips').querySelectorAll('.chip-btn').forEach(c =>
+    c.classList.toggle('active', c.dataset.cat === cat)
+  );
+
+  qs('#room-edit-modal').style.display = 'flex';
+  setTimeout(() => qs('#room-edit-balance').focus(), 80);
+}
+
+async function saveRoomEdit() {
+  const roomId    = qs('#room-edit-id').value;
+  const balance   = Math.max(0, parseFloat(qs('#room-edit-balance').value) || 0);
+  const obs       = qs('#room-edit-obs').value.trim();
+  const reception = qs('#room-edit-reception').checked;
+  const cat       = qs('#room-edit-category-chips .chip-btn.active')?.dataset.cat || '';
+
+  const btn = qs('#btn-save-room-edit');
+  btn.textContent = t('salvando');
+  btn.disabled    = true;
+
+  try {
+    await db.collection('rooms').doc(roomId).update({
+      balance, balanceCategory: cat, observations: obs,
+      requiresReception: reception, updatedAt: SV(),
+    });
+    qs('#room-edit-modal').style.display = 'none';
+    toast('Reserva atualizada!', 'success');
+  } catch (err) {
+    toast('Erro: ' + err.message, 'error');
+  } finally {
+    btn.textContent = t('salvar');
+    btn.disabled    = false;
+  }
+}
+
+// ── Guest — Comprovante de Consumo ────────────────────────────────────────────
+function printGuestReceipt() {
+  const room  = state.lastPaidRoom;
+  const items = state.lastPaidItems || [];
+  const bal   = state.lastPaidBalance || 0;
+  const total = +(bal + items.reduce((s, i) => s + i.price, 0)).toFixed(2);
+
+  if (!room) { toast('Nenhum comprovante disponível.', 'warning'); return; }
+
+  const itemsHtml = items.map(i =>
+    `<tr>
+      <td style="padding:4px 0;border-bottom:1px solid #eee;font-size:12px">${i.name}</td>
+      <td style="padding:4px 0;border-bottom:1px solid #eee;font-size:12px;text-align:right;font-weight:600">R$ ${Number(i.price).toFixed(2).replace('.',',')}</td>
+    </tr>`).join('');
+
+  const html = `<!DOCTYPE html><html><head>
+<meta charset="UTF-8"><title>Comprovante</title>
+<style>
+  body{font-family:Arial,sans-serif;padding:32px 28px;color:#111;font-size:14px}
+  h1{font-size:17px;margin-bottom:2px}.sub{color:#666;font-size:11px;margin-bottom:20px}
+  table.info{width:100%;border-collapse:collapse}
+  table.info td{padding:6px 0;border-bottom:1px solid #eee;font-size:13px;vertical-align:top}
+  table.info td:first-child{color:#666;width:38%}table.info td:last-child{font-weight:600}
+  .total{font-size:17px;font-weight:700;color:#1a56db}
+  .footer{margin-top:28px;font-size:10px;color:#999;text-align:center;border-top:1px dashed #ddd;padding-top:12px}
+  .print-btn{margin-top:20px;padding:10px 22px;background:#2563eb;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-weight:600}
+  @media print{.print-btn{display:none}}
+</style></head><body>
+  <h1>Comprovante de Consumo</h1>
+  <div class="sub">Fast Check-Out · Hotel</div>
+  <table class="info">
+    <tr><td>Quarto</td><td>${room.roomNumber}</td></tr>
+    <tr><td>Hóspede</td><td>${room.guestName}</td></tr>
+    <tr><td>RSV</td><td>${room.rsv || '—'}</td></tr>
+    ${bal > 0 ? `<tr><td>Hospedagem</td><td>R$ ${Number(bal).toFixed(2).replace('.',',')}</td></tr>` : ''}
+    ${itemsHtml ? `<tr><td>Consumo</td><td><table style="width:100%">${itemsHtml}</table></td></tr>` : ''}
+    <tr><td>Total</td><td class="total">R$ ${total.toFixed(2).replace('.',',')}</td></tr>
+    <tr><td>Data / Hora</td><td>${new Date().toLocaleString('pt-BR')}</td></tr>
+  </table>
+  <div class="footer">Comprovante gerado automaticamente · Fast Check-Out Hotel<br>${new Date().toLocaleString('pt-BR')}</div>
+  <br><button class="print-btn" onclick="window.print()">🖨 Imprimir / Salvar PDF</button>
+</body></html>`;
+
+  const url = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }));
+  const w   = window.open(url, '_blank', 'width=460,height=620');
+  w?.focus();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+window.printGuestReceipt = printGuestReceipt;
+
 // ── Admin — Payments ──────────────────────────────────────────────────────────
 function subscribePayments() {
   if (state.paymentsUnsubscribe) state.paymentsUnsubscribe();
@@ -862,10 +1029,12 @@ function renderPayments(payments) {
 
   const textF   = (qs('#filter-payment')?.value || '').toLowerCase();
   const methodF = qs('#filter-payment-method')?.value || '';
+  const statusF = qs('#filter-payment-status') ? (qs('#filter-payment-status').value ?? 'approved') : 'approved';
 
   let list = payments;
   if (textF)   list = list.filter(p => p.roomNumber?.toLowerCase().includes(textF) || p.guestName?.toLowerCase().includes(textF));
   if (methodF) list = list.filter(p => p.method === methodF);
+  if (statusF) list = list.filter(p => p.status === statusF);
 
   if (!list.length) {
     container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">💰</div><p>Nenhum pagamento encontrado.</p></div>';
@@ -890,6 +1059,8 @@ function renderPayments(payments) {
       const method  = p.method === 'pix' ? '🔷 PIX' : '💳 Cartão';
       const status  = p.status === 'approved'
         ? '<span class="badge-admin">✅ Aprovado</span>'
+        : p.status === 'rejected'
+        ? '<span style="color:var(--danger);font-size:.78rem;font-weight:600">❌ Recusado</span>'
         : '<span class="badge-guest">⏳ Pendente</span>';
       return `<tr>
         <td style="color:var(--text-dim)">${i + 1}</td>
@@ -1243,6 +1414,12 @@ function handleMPReturn() {
 
 // ── Event bindings ─────────────────────────────────────────────────────────
 function bindEvents() {
+  // Nav logo → home
+  qs('#nav-logo-btn').addEventListener('click', () => showView('guest-view'));
+
+  // Language switcher
+  qsa('.lang-btn').forEach(b => b.addEventListener('click', () => setLang(b.dataset.lang)));
+
   // Nav
   qs('#btn-admin-login').addEventListener('click', () => showView('admin-login-view'));
   qs('#btn-admin-logout').addEventListener('click', logout);
@@ -1287,6 +1464,19 @@ function bindEvents() {
     navigator.clipboard?.writeText(code).then(() => toast('Código copiado!', 'success', 2000));
   });
 
+  // Reception alert
+  qs('#btn-back-from-reception').addEventListener('click', () => {
+    qs('#reception-alert-view').style.display = 'none';
+    qs('.guest-search-card').style.display = '';
+    state.foundRoom = null;
+  });
+  qs('#btn-call-reception').addEventListener('click', () => {
+    toast('Por favor, dirija-se ao balcão da recepção.', 'info', 6000);
+  });
+
+  // Guest receipt
+  qs('#btn-guest-receipt').addEventListener('click', printGuestReceipt);
+
   // Guest success banner
   qs('#btn-new-checkout').addEventListener('click', resetGuestView);
 
@@ -1330,8 +1520,27 @@ function bindEvents() {
     qs('#prod-image-preview-wrap').style.display = url ? '' : 'none';
   });
 
+  // Rooms filters
+  qs('#filter-rooms-text').addEventListener('input',  () => renderRoomsGrid(state.allRooms));
+  qs('#sort-rooms').addEventListener('change',        () => renderRoomsGrid(state.allRooms));
+
+  // Room edit modal
+  qs('#btn-save-room-edit').addEventListener('click', saveRoomEdit);
+  qs('#btn-cancel-room-edit').addEventListener('click', () => qs('#room-edit-modal').style.display = 'none');
+  qs('#close-room-edit-modal').addEventListener('click', () => qs('#room-edit-modal').style.display = 'none');
+  qs('#room-edit-modal').addEventListener('click', e => {
+    if (e.target === qs('#room-edit-modal')) qs('#room-edit-modal').style.display = 'none';
+  });
+  qs('#room-edit-category-chips').addEventListener('click', e => {
+    const chip = e.target.closest('.chip-btn');
+    if (!chip) return;
+    qs('#room-edit-category-chips').querySelectorAll('.chip-btn').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+  });
+
   // Payments
-  qs('#filter-payment').addEventListener('input',  () => renderPayments(state.allPayments));
+  qs('#filter-payment').addEventListener('input',         () => renderPayments(state.allPayments));
+  qs('#filter-payment-status').addEventListener('change', () => renderPayments(state.allPayments));
   qs('#filter-payment-method').addEventListener('change', () => renderPayments(state.allPayments));
 
   // History
@@ -1353,6 +1562,8 @@ function bindEvents() {
   bindEvents();
   showView('guest-view');
   subscribeProductsGlobal();
+  // Apply saved language and mark active lang button
+  setLang(currentLang);
   // Clear guest form after browser autofill has a chance to fire
   setTimeout(() => {
     const gn = qs('#guest-name'); if (gn) gn.value = '';

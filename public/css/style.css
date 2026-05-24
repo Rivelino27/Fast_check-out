@@ -927,6 +927,126 @@ td.td-time  { color: var(--text-sub); font-size: .76rem; white-space: nowrap; }
   .btn-add-prod         { width: 100%; justify-content: center; display: flex; }
 }
 
+/* ── Language Switcher ───────────────────────────────────────── */
+.lang-switcher {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  margin-right: 4px;
+}
+.lang-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  background: var(--glass-1);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color var(--t-fast), transform var(--t-fast), background var(--t-fast);
+  padding: 0;
+}
+.lang-btn:hover { background: var(--glass-2); transform: scale(1.1); }
+.lang-btn.active {
+  border-color: var(--blue);
+  box-shadow: 0 0 8px var(--blue-glow);
+  transform: scale(1.15);
+}
+
+/* ── Reception Alert ─────────────────────────────────────────── */
+.reception-alert-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 44px 32px;
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(248,113,113,.28);
+  box-shadow: 0 0 40px rgba(248,113,113,.10), var(--led-base);
+  max-width: 480px;
+  margin: 20px auto;
+}
+.reception-alert-icon {
+  font-size: 3rem;
+  margin-bottom: 12px;
+  filter: drop-shadow(0 0 12px rgba(248,113,113,.4));
+}
+.reception-alert-card h2 {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.5rem;
+  color: var(--danger);
+  margin-bottom: 8px;
+}
+
+/* ── Room Edit Modal ─────────────────────────────────────────── */
+.category-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.chip-btn {
+  padding: 5px 12px;
+  border-radius: 20px;
+  border: 1px solid var(--b-subtle);
+  background: var(--glass-1);
+  color: var(--text-sub);
+  font-size: .8rem;
+  cursor: pointer;
+  transition: background var(--t-fast), border-color var(--t-fast), color var(--t-fast);
+}
+.chip-btn:hover { border-color: var(--b-normal); color: var(--text); }
+.chip-btn.active {
+  background: var(--blue-dim);
+  border-color: var(--blue);
+  color: var(--blue-hi);
+  font-weight: 600;
+}
+
+/* ── Rooms filter bar ────────────────────────────────────────── */
+.rooms-filter-bar { margin-bottom: 6px; }
+
+/* ── Room card additions ─────────────────────────────────────── */
+.room-card.needs-reception {
+  border-color: rgba(248,113,113,.35) !important;
+  box-shadow: 0 0 18px rgba(248,113,113,.08);
+}
+.room-card-obs {
+  font-size: .75rem;
+  color: var(--text-dim);
+  margin: 4px 0;
+  font-style: italic;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.flag-reception {
+  background: rgba(248,113,113,.12);
+  border: 1px solid rgba(248,113,113,.3);
+  color: var(--danger);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: .65rem;
+  font-weight: 600;
+}
+.flag-cat {
+  background: var(--blue-dim);
+  border: 1px solid var(--b-subtle);
+  color: var(--blue-hi);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: .65rem;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+.btn-room-edit {
+  padding: 4px 8px !important;
+  font-size: .82rem !important;
+  min-width: 30px;
+}
+
 /* Área segura iOS (notch / home bar) */
 @supports (padding-bottom: env(safe-area-inset-bottom)) {
   #main-content {
