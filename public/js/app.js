@@ -857,7 +857,6 @@ function renderHistory(history) {
   const textF = (qs('#filter-history')?.value || '').toLowerCase();
   const fromF = qs('#filter-history-from')?.value;
   const toF   = qs('#filter-history-to')?.value;
-  const toF   = qs('#filter-history-to')?.value;
 
   let list = history;
   if (textF) list = list.filter(c =>
