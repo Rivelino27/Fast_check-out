@@ -6,7 +6,7 @@
   <title>Fast Check-Out · Hotel</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -14,7 +14,7 @@
   <!-- ══ NAVBAR ══════════════════════════════════════════════════════════ -->
   <nav class="navbar">
     <div class="nav-logo" id="nav-logo-btn" style="cursor:pointer">
-      <span class="nav-logo-text">Fast Check-Out</span>
+      <span class="nav-logo-text" data-short="FCO">Fast Check-Out</span>
       <span class="nav-logo-sub">Hotel · Digital</span>
     </div>
     <div class="nav-actions">
@@ -69,6 +69,12 @@
                  placeholder="Ex: 101" autocomplete="off"
                  name="guest_search_room" inputmode="numeric" spellcheck="false"
                  data-i18n="room_placeholder" data-i18n-attr="placeholder">
+        </div>
+        <div class="form-group" id="guest-token-group" style="display:none">
+          <label data-i18n="token_label">Token Diário</label>
+          <input type="text" id="guest-token" class="input-neon"
+                 placeholder="Ex: 12345" maxlength="5" inputmode="numeric" spellcheck="false"
+                 data-i18n="token_placeholder" data-i18n-attr="placeholder">
         </div>
         <button id="btn-search-guest" class="btn-primary" type="button" data-i18n="search_btn">Consultar Saldo</button>
       </form>
@@ -212,6 +218,7 @@
           <button class="tab-btn"        data-tab="payments"  data-i18n="tab_pagamentos">Pagamentos</button>
           <button class="tab-btn"        data-tab="history"   data-i18n="tab_historico">Histórico</button>
           <button class="tab-btn"        data-tab="upload"    data-i18n="tab_upload">Upload</button>
+          <button class="tab-btn"        data-tab="config"    data-i18n="tab_config">Config</button>
         </div>
       </div>
 
@@ -252,8 +259,8 @@
       <div id="tab-checkouts" class="tab-content">
         <div class="checkouts-toolbar">
           <input type="text" id="filter-room" class="input-neon input-sm"
-                 placeholder="Filtrar por quarto…"
-                 data-i18n="filter_checkout_room_ph" data-i18n-attr="placeholder">
+                 placeholder="Quarto, nome ou RSV…"
+                 data-i18n="filter_checkout_search_ph" data-i18n-attr="placeholder">
           <input type="datetime-local" id="filter-date" class="input-neon input-sm">
           <button id="btn-export-excel" class="btn-secondary" data-i18n="exportar_excel">Exportar Excel</button>
           <button id="btn-clear-day" class="btn-danger btn-sm" data-i18n="btn_limpar_dia">🗑 Limpar Dados do Dia</button>
@@ -348,6 +355,40 @@
               <button id="btn-cancel-upload" class="btn-ghost" data-i18n="cancelar">Cancelar</button>
               <button id="btn-confirm-upload" class="btn-primary" style="max-width:200px" data-i18n="confirmar_upload_btn">Confirmar Upload</button>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab Config -->
+      <div id="tab-config" class="tab-content">
+        <div class="config-section surface" style="max-width:640px;margin:0 auto 24px;padding:24px">
+          <h3 style="font-family:'Outfit',system-ui,sans-serif;margin-bottom:20px" data-i18n="autenticacao_hospedes">Autenticação de Hóspedes</h3>
+          <div class="form-group">
+            <label data-i18n="modo_checkout">Modo de Check-Out</label>
+            <div style="display:flex;flex-direction:column;gap:10px;margin-top:8px">
+              <label class="radio-opt">
+                <input type="radio" name="auth-mode" id="auth-mode-simple" value="simple">
+                <span data-i18n="auth_modo_simples">Apenas Nome + Quarto (sem token)</span>
+              </label>
+              <label class="radio-opt">
+                <input type="radio" name="auth-mode" id="auth-mode-token" value="token">
+                <span data-i18n="auth_modo_token">Nome + Quarto + Token Diário</span>
+              </label>
+            </div>
+          </div>
+          <button id="btn-save-config" class="btn-primary" style="max-width:220px" data-i18n="salvar_config">Salvar Configuração</button>
+        </div>
+
+        <div id="token-management-section" class="config-section surface" style="max-width:640px;margin:0 auto;padding:24px;display:none">
+          <h3 style="font-family:'Outfit',system-ui,sans-serif;margin-bottom:16px" data-i18n="tokens_diarios">Tokens Diários</h3>
+          <p style="color:var(--text-sub);font-size:.88rem;margin-bottom:16px" data-i18n="tokens_desc">Cada token tem validade de 24 horas e pode ser usado por múltiplos quartos.</p>
+          <div style="display:flex;gap:10px;align-items:center;margin-bottom:20px;flex-wrap:wrap">
+            <input type="number" id="token-count-input" class="input-neon input-sm" value="300" min="1" max="490" style="max-width:80px">
+            <label style="color:var(--text-sub);font-size:.84rem" data-i18n="tokens_qtd">tokens</label>
+            <button id="btn-generate-tokens" class="btn-secondary">🔑 <span data-i18n="gerar_tokens">Gerar Tokens</span></button>
+          </div>
+          <div id="tokens-list">
+            <div class="empty-state"><div class="empty-state-icon">🔑</div><p data-i18n="sem_tokens">Nenhum token ativo.</p></div>
           </div>
         </div>
       </div>

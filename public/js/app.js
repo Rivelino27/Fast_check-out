@@ -19,6 +19,7 @@ const state = {
   allProducts:           [],
   allPayments:           [],
   allHistory:            [],
+  allTokens:             [],
   lastPaidRoom:          null,
   lastPaidItems:         [],
   lastPaidBalance:       0,
@@ -30,6 +31,12 @@ const state = {
   paymentsUnsubscribe:   null,
   historyUnsubscribe:    null,
   uploadMetaUnsubscribe: null,
+  configUnsubscribe:     null,
+  tokensUnsubscribe:     null,
+  checkoutConfig:        { requiresToken: false },
+  roomQuickFilter:       '',
+  checkinSort:           { col: 'roomNumber', dir: 1 },
+  checkinTypeFilter:     '',
 };
 
 // ── Utils ──────────────────────────────────────────────────────────────────
@@ -83,6 +90,7 @@ function showTab(id) {
   if (id === 'checkouts') renderCheckouts(state.allCheckouts);
   if (id === 'payments')  renderPayments(state.allPayments);
   if (id === 'history')   renderHistory(state.allHistory);
+  if (id === 'config')    renderConfigTab();
 }
 
 // ── Auth ───────────────────────────────────────────────────────────────────
@@ -167,6 +175,23 @@ async function searchGuest() {
     if (matched.length === 0) {
       toast('Quarto não encontrado ou check-out já realizado.', 'warning');
       return;
+    }
+
+    // Token verification (if required by config)
+    if (state.checkoutConfig?.requiresToken) {
+      const tokenVal = (qs('#guest-token')?.value || '').trim();
+      if (!tokenVal) { toast(t('token_obrigatorio'), 'warning'); return; }
+      const now = new Date();
+      const tokenSnap = await db.collection('dailyTokens')
+        .where('token', '==', tokenVal)
+        .get();
+      const validToken = tokenSnap.docs.find(d => {
+        const exp = d.data().expiresAt?.toDate?.() || new Date(d.data().expiresAt);
+        return exp > now;
+      });
+      if (!validToken) { toast(t('token_invalido_msg'), 'error'); return; }
+      // Record usage
+      validToken.ref.update({ usedBy: firebase.firestore.FieldValue.arrayUnion(roomNum) }).catch(() => {});
     }
 
     state.foundRoom = matched[0];
@@ -366,7 +391,7 @@ function renderProductsAdmin(products) {
           </td>
           <td style="font-weight:600">${p.name}</td>
           <td style="color:var(--text-sub);font-size:.83rem">${p.description || '—'}</td>
-          <td style="font-family:'Playfair Display',serif;font-weight:700;color:var(--blue)">${R$(p.price)}</td>
+          <td style="font-family:'Outfit',system-ui,sans-serif;font-weight:700;color:var(--blue)">${R$(p.price)}</td>
           <td><span class="${p.available !== false ? 'badge-admin' : 'badge-guest'}">${p.available !== false ? t('prod_ativo') : t('prod_inativo')}</span></td>
           ${state.isSuperAdmin ? `<td><button class="btn-secondary btn-sm btn-edit-prod" data-id="${p.id}">${t('editar')}</button></td>` : ''}
         </tr>`).join('')}
@@ -658,14 +683,18 @@ function startAdminSubs() {
   subscribePayments();
   subscribeHistory();
   subscribeUploadMeta();
+  subscribeTokens();
+  // subscribeCheckoutConfig is started at boot and must never be stopped
 }
 function stopAdminSubs() {
   [
     state.roomsUnsubscribe, state.checkoutsUnsubscribe, state.notifUnsubscribe,
     state.paymentsUnsubscribe, state.historyUnsubscribe, state.uploadMetaUnsubscribe,
+    state.tokensUnsubscribe,
   ].forEach(fn => fn && fn());
   state.roomsUnsubscribe = state.checkoutsUnsubscribe = state.notifUnsubscribe =
-  state.paymentsUnsubscribe = state.historyUnsubscribe = state.uploadMetaUnsubscribe = null;
+  state.paymentsUnsubscribe = state.historyUnsubscribe = state.uploadMetaUnsubscribe =
+  state.tokensUnsubscribe = null;
 }
 
 // ── Admin — Rooms ──────────────────────────────────────────────────────────
@@ -684,12 +713,20 @@ function renderRoomsGrid(rooms) {
   const textF = (qs('#filter-rooms-text')?.value || '').toLowerCase();
   const sortF = qs('#sort-rooms')?.value || 'number';
 
-  // Filter
-  let filtered = textF
-    ? rooms.filter(r =>
-        r.roomNumber?.toLowerCase().includes(textF) ||
-        r.guestName?.toLowerCase().includes(textF))
-    : rooms;
+  // Quick-filter chips
+  let filtered = rooms;
+  switch (state.roomQuickFilter) {
+    case 'active':       filtered = rooms.filter(r => r.status === 'active'); break;
+    case 'has-balance':  filtered = rooms.filter(r => r.status === 'active' && (r.balance || 0) > 0); break;
+    case 'checked-out':  filtered = rooms.filter(r => r.status === 'checked-out'); break;
+  }
+
+  // Text filter
+  if (textF) {
+    filtered = filtered.filter(r =>
+      r.roomNumber?.toLowerCase().includes(textF) ||
+      r.guestName?.toLowerCase().includes(textF));
+  }
 
   // Sort
   const sorted = [...filtered].sort((a, b) => {
@@ -701,16 +738,27 @@ function renderRoomsGrid(rooms) {
     }
   });
 
-  if (!sorted.length) {
-    grid.innerHTML = rooms.length
-      ? `<div class="empty-state"><div class="empty-state-icon">🔍</div><p>${t('nenhum_quarto_filtro')}</p></div>`
-      : `<div class="empty-state"><div class="empty-state-icon">🏨</div><p>${t('nenhum_quarto')}</p></div>`;
-    return;
-  }
-
   const active  = rooms.filter(r => r.status === 'active').length;
   const couted  = rooms.filter(r => r.status === 'checked-out').length;
   const withBal = rooms.filter(r => r.status === 'active' && (r.balance || 0) > 0).length;
+
+  const chips = `
+    <div style="grid-column:1/-1;display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px" id="rooms-qf-row">
+      <button class="qf-chip ${state.roomQuickFilter===''?'active':''}" data-qf="">Todos</button>
+      <button class="qf-chip ${state.roomQuickFilter==='active'?'active':''}" data-qf="active">${t('stat_ativos')}</button>
+      <button class="qf-chip ${state.roomQuickFilter==='has-balance'?'active':''}" data-qf="has-balance">${t('stat_com_saldo')}</button>
+      <button class="qf-chip ${state.roomQuickFilter==='checked-out'?'active':''}" data-qf="checked-out">${t('stat_check_out')}</button>
+    </div>`;
+
+  if (!sorted.length) {
+    grid.innerHTML = chips + (rooms.length
+      ? `<div class="empty-state" style="grid-column:1/-1"><div class="empty-state-icon">🔍</div><p>${t('nenhum_quarto_filtro')}</p></div>`
+      : `<div class="empty-state" style="grid-column:1/-1"><div class="empty-state-icon">🏨</div><p>${t('nenhum_quarto')}</p></div>`);
+    grid.querySelectorAll('.qf-chip').forEach(btn =>
+      btn.addEventListener('click', () => { state.roomQuickFilter = btn.dataset.qf; renderRoomsGrid(state.allRooms); })
+    );
+    return;
+  }
 
   const stats = `
     <div style="grid-column:1/-1;display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px">
@@ -719,7 +767,7 @@ function renderRoomsGrid(rooms) {
       <div class="stat-chip"><strong style="color:var(--success)">${couted}</strong><span style="color:var(--text-sub)">${t('stat_check_out')}</span></div>
     </div>`;
 
-  grid.innerHTML = stats + sorted.map(r => {
+  grid.innerHTML = chips + stats + sorted.map(r => {
     const bal         = r.balance || 0;
     const isOut       = r.status === 'checked-out';
     const cardClass   = isOut ? 'checked-out' : (bal > 0 ? 'has-balance' : 'no-balance');
@@ -756,6 +804,9 @@ function renderRoomsGrid(rooms) {
     </div>`;
   }).join('');
 
+  grid.querySelectorAll('.qf-chip').forEach(btn =>
+    btn.addEventListener('click', () => { state.roomQuickFilter = btn.dataset.qf; renderRoomsGrid(state.allRooms); })
+  );
   grid.querySelectorAll('.btn-admin-checkout:not([disabled])').forEach(btn =>
     btn.addEventListener('click', () => adminCheckout(btn.dataset.id))
   );
@@ -778,23 +829,62 @@ async function adminCheckout(roomId) {
 function renderCheckins(rooms) {
   const nameF = (qs('#filter-checkin-name')?.value || '').toLowerCase();
   const roomF = (qs('#filter-checkin-room')?.value || '').toLowerCase();
+  const typeF = state.checkinTypeFilter || '';
 
-  let list = rooms.filter(r => r.status === 'active');
+  const active = rooms.filter(r => r.status === 'active');
+  let list = active;
   if (nameF) list = list.filter(r => r.guestName.toLowerCase().includes(nameF));
   if (roomF) list = list.filter(r => r.roomNumber.toLowerCase().includes(roomF));
+  if (typeF === 'invoice') list = list.filter(r => r.invoice);
+  else if (typeF === 'debit') list = list.filter(r => r.debit);
+  else if (typeF === 'direct') list = list.filter(r => !r.invoice && !r.debit);
+
+  const { col: sc, dir: sd } = state.checkinSort;
+  list = [...list].sort((a, b) => {
+    if (sc === 'balance')    return sd * ((a.balance || 0) - (b.balance || 0));
+    if (sc === 'uploadedAt') {
+      const da = a.uploadedAt?.toDate?.() || new Date(a.uploadedAt || 0);
+      const db_ = b.uploadedAt?.toDate?.() || new Date(b.uploadedAt || 0);
+      return sd * (da - db_);
+    }
+    return sd * (a[sc] || '').localeCompare(b[sc] || '', undefined, { numeric: true });
+  });
 
   const container = qs('#checkins-list');
   if (!container) return;
 
+  const si = col => sc === col ? (sd > 0 ? ' ▲' : ' ▼') : ' <span style="opacity:.28;font-size:.7em">⇅</span>';
+  const th = `cursor:pointer;user-select:none;white-space:nowrap`;
+
+  const nInv  = active.filter(r => r.invoice).length;
+  const nDeb  = active.filter(r => r.debit).length;
+  const nDir  = active.filter(r => !r.invoice && !r.debit).length;
+
+  const chips = `<div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px">
+    <button class="qf-chip ${typeF===''?'active':''}" data-tf="">Todos (${active.length})</button>
+    <button class="qf-chip ${typeF==='invoice'?'active':''}" data-tf="invoice">${t('th_fatura')} (${nInv})</button>
+    <button class="qf-chip ${typeF==='debit'?'active':''}" data-tf="debit">${t('th_debito')} (${nDeb})</button>
+    <button class="qf-chip ${typeF==='direct'?'active':''}" data-tf="direct">Pgto Direto (${nDir})</button>
+  </div>`;
+
   if (!list.length) {
-    container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🏨</div><p>Nenhuma reserva ativa encontrada.</p></div>';
+    container.innerHTML = chips + '<div class="empty-state"><div class="empty-state-icon">🏨</div><p>Nenhuma reserva encontrada.</p></div>';
+    container.querySelectorAll('.qf-chip').forEach(btn =>
+      btn.addEventListener('click', () => { state.checkinTypeFilter = btn.dataset.tf; renderCheckins(state.allRooms); })
+    );
     return;
   }
 
-  container.innerHTML = `<div class="checkouts-table-wrap"><table>
+  container.innerHTML = chips + `<div class="checkouts-table-wrap"><table>
     <thead><tr>
-      <th>#</th><th>${t('th_quarto')}</th><th>${t('th_hospede')}</th><th>${t('th_rsv')}</th>
-      <th>${t('th_saldo')}</th><th>${t('th_debito')}</th><th>${t('th_fatura')}</th><th>${t('th_importado')}</th>
+      <th>#</th>
+      <th data-sc="roomNumber" style="${th}">${t('th_quarto')}${si('roomNumber')}</th>
+      <th data-sc="guestName"  style="${th}">${t('th_hospede')}${si('guestName')}</th>
+      <th data-sc="rsv"        style="${th}">${t('th_rsv')}${si('rsv')}</th>
+      <th data-sc="balance"    style="${th}">${t('th_saldo')}${si('balance')}</th>
+      <th>${t('th_debito')}</th><th>${t('th_fatura')}</th>
+      <th data-sc="uploadedAt" style="${th}">${t('th_importado')}${si('uploadedAt')}</th>
+      <th>${t('th_acoes')}</th>
     </tr></thead>
     <tbody>${list.map((r, i) => `
       <tr>
@@ -806,8 +896,24 @@ function renderCheckins(rooms) {
         <td>${r.debit   ? `<span class="flag flag-debit">${t('sim')}</span>`    : `<span style="color:var(--text-dim)">${t('nao')}</span>`}</td>
         <td>${r.invoice ? `<span class="flag flag-invoice">${t('sim')}</span>`  : `<span style="color:var(--text-dim)">${t('nao')}</span>`}</td>
         <td class="td-time">${fmtDate(r.uploadedAt || r.updatedAt)}</td>
+        <td><button class="btn-secondary btn-sm btn-room-edit" data-id="${r.id}">✏ ${t('editar')}</button></td>
       </tr>`).join('')}
     </tbody></table></div>`;
+
+  container.querySelectorAll('.qf-chip').forEach(btn =>
+    btn.addEventListener('click', () => { state.checkinTypeFilter = btn.dataset.tf; renderCheckins(state.allRooms); })
+  );
+  container.querySelectorAll('th[data-sc]').forEach(thEl =>
+    thEl.addEventListener('click', () => {
+      const col = thEl.dataset.sc;
+      if (state.checkinSort.col === col) state.checkinSort.dir *= -1;
+      else { state.checkinSort.col = col; state.checkinSort.dir = 1; }
+      renderCheckins(state.allRooms);
+    })
+  );
+  container.querySelectorAll('.btn-room-edit').forEach(btn =>
+    btn.addEventListener('click', () => openRoomEdit(btn.dataset.id))
+  );
 }
 
 // ── Admin — Checkouts ──────────────────────────────────────────────────────
@@ -821,11 +927,15 @@ function subscribeCheckouts() {
 }
 
 function renderCheckouts(checkouts) {
-  const roomF = (qs('#filter-room')?.value || '').toLowerCase();
+  const textF = (qs('#filter-room')?.value || '').toLowerCase();
   const dateF = qs('#filter-date')?.value || '';
 
   let list = checkouts;
-  if (roomF) list = list.filter(c => c.roomNumber.toLowerCase().includes(roomF));
+  if (textF) list = list.filter(c =>
+    c.roomNumber?.toLowerCase().includes(textF) ||
+    c.guestName?.toLowerCase().includes(textF) ||
+    (c.rsv || '').toLowerCase().includes(textF)
+  );
   if (dateF) {
     const d = new Date(dateF);
     list = list.filter(c => {
@@ -1204,7 +1314,7 @@ function renderPayments(payments) {
         <td style="font-weight:600">${p.guestName || '—'}</td>
         <td style="color:var(--text-dim);font-size:.8rem">${p.rsv || '—'}</td>
         <td>${method}</td>
-        <td style="font-family:'Playfair Display',serif;font-weight:700;color:var(--blue)">${R$(p.amount)}</td>
+        <td style="font-family:'Outfit',system-ui,sans-serif;font-weight:700;color:var(--blue)">${R$(p.amount)}</td>
         <td>${status}</td>
         <td class="td-time">${fmtDate(p.createdAt)}</td>
         <td><button class="btn-secondary btn-sm btn-print-receipt" data-id="${p.id}" ${p.status !== 'approved' ? 'disabled' : ''}>${t('imprimir')}</button></td>
@@ -1548,6 +1658,185 @@ function handleMPReturn() {
   }
 }
 
+// ── Refresh current tab (for i18n language switch) ─────────────────────────
+function refreshCurrentTab() {
+  const activeTab = qs('.tab-btn.active')?.dataset.tab;
+  if (!activeTab) return;
+  const map = {
+    rooms:    () => renderRoomsGrid(state.allRooms),
+    checkins: () => renderCheckins(state.allRooms),
+    checkouts:() => renderCheckouts(state.allCheckouts),
+    products: () => renderProductsAdmin(state.allProducts),
+    payments: () => renderPayments(state.allPayments),
+    history:  () => renderHistory(state.allHistory),
+    config:   () => renderConfigTab(),
+  };
+  map[activeTab]?.();
+}
+window.refreshCurrentTab = refreshCurrentTab;
+
+// ── Config ─────────────────────────────────────────────────────────────────
+function subscribeCheckoutConfig() {
+  if (state.configUnsubscribe) state.configUnsubscribe();
+  state.configUnsubscribe = db.collection('config').doc('checkout')
+    .onSnapshot(doc => {
+      state.checkoutConfig = doc.exists ? doc.data() : { requiresToken: false };
+      const requiresToken = state.checkoutConfig.requiresToken === true;
+      const tg = qs('#guest-token-group');
+      if (tg) tg.style.display = requiresToken ? '' : 'none';
+      // Update radio in config tab if visible
+      const r = qs(`#auth-mode-${requiresToken ? 'token' : 'simple'}`);
+      if (r) r.checked = true;
+      const tm = qs('#token-management-section');
+      if (tm) tm.style.display = requiresToken ? '' : 'none';
+    }, console.error);
+}
+
+async function saveCheckoutConfig() {
+  const requiresToken = qs('#auth-mode-token')?.checked === true;
+  const btn = qs('#btn-save-config');
+  btn.disabled = true;
+  try {
+    await db.collection('config').doc('checkout').set({ requiresToken }, { merge: true });
+    toast(t('config_salvo'), 'success');
+  } catch (err) {
+    toast('Erro: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ── Tokens ─────────────────────────────────────────────────────────────────
+function subscribeTokens() {
+  if (state.tokensUnsubscribe) state.tokensUnsubscribe();
+  state.tokensUnsubscribe = db.collection('dailyTokens').orderBy('createdAt', 'desc')
+    .onSnapshot(snap => {
+      const now = new Date();
+      state.allTokens = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+        .filter(tk => tk.expiresAt && (tk.expiresAt.toDate ? tk.expiresAt.toDate() : new Date(tk.expiresAt)) > now);
+      renderTokensList();
+    }, console.error);
+}
+
+function generateUniqueDigitToken() {
+  const pool = [1,2,3,4,5,6,7,8,9,0];
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  // Ensure no leading zero
+  if (pool[0] === 0) [pool[0], pool[1]] = [pool[1], pool[0]];
+  return pool.slice(0, 5).join('');
+}
+
+async function generateTokens() {
+  const count = Math.max(1, Math.min(490, parseInt(qs('#token-count-input')?.value) || 300));
+  const btn   = qs('#btn-generate-tokens');
+  btn.disabled = true;
+  try {
+    const now     = new Date();
+    const expires = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    const existing = new Set(state.allTokens.map(tk => tk.token));
+    const batch = db.batch();
+    let created = 0;
+    let attempts = 0;
+    while (created < count && attempts < 100) {
+      attempts++;
+      const token = generateUniqueDigitToken();
+      if (existing.has(token)) continue;
+      existing.add(token);
+      batch.set(db.collection('dailyTokens').doc(), {
+        token, createdAt: firebase.firestore.Timestamp.fromDate(now),
+        expiresAt: firebase.firestore.Timestamp.fromDate(expires),
+        usedBy: [], markedInUse: false,
+      });
+      created++;
+    }
+    await batch.commit();
+    toast(`${created} token(s) gerados!`, 'success');
+  } catch (err) {
+    toast('Erro: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function toggleTokenMark(tokenId, current) {
+  try {
+    await db.collection('dailyTokens').doc(tokenId).update({ markedInUse: !current });
+  } catch (err) {
+    toast('Erro: ' + err.message, 'error');
+  }
+}
+
+async function deleteToken(tokenId) {
+  try {
+    await db.collection('dailyTokens').doc(tokenId).delete();
+    toast('Token removido.', 'info');
+  } catch (err) {
+    toast('Erro: ' + err.message, 'error');
+  }
+}
+
+function renderConfigTab() {
+  const requiresToken = state.checkoutConfig?.requiresToken === true;
+  const r = qs(`#auth-mode-${requiresToken ? 'token' : 'simple'}`);
+  if (r) r.checked = true;
+  const tm = qs('#token-management-section');
+  if (tm) tm.style.display = requiresToken ? '' : 'none';
+  renderTokensList();
+}
+
+function renderTokensList() {
+  const container = qs('#tokens-list');
+  if (!container) return;
+  if (!state.allTokens.length) {
+    container.innerHTML = `<div class="empty-state"><div class="empty-state-icon">🔑</div><p>${t('sem_tokens')}</p></div>`;
+    return;
+  }
+
+  // Available first, marked/used last
+  const sorted = [...state.allTokens].sort((a, b) => {
+    const aU = a.markedInUse || (a.usedBy?.length > 0);
+    const bU = b.markedInUse || (b.usedBy?.length > 0);
+    if (aU !== bU) return aU ? 1 : -1;
+    const ta = a.createdAt?.toDate?.() || new Date(0);
+    const tb = b.createdAt?.toDate?.() || new Date(0);
+    return tb - ta;
+  });
+
+  container.innerHTML = `<div class="checkouts-table-wrap"><table>
+    <thead><tr>
+      <th>Token</th><th>${t('token_expira')}</th><th>${t('token_usado_em')}</th><th>${t('th_status')}</th><th>${t('th_acoes')}</th>
+    </tr></thead>
+    <tbody>${sorted.map(tk => {
+      const exp  = tk.expiresAt?.toDate ? tk.expiresAt.toDate() : new Date(tk.expiresAt);
+      const mins = Math.round((exp - Date.now()) / 60000);
+      const timeLeft = mins > 60 ? `${Math.round(mins/60)}h` : `${mins}m`;
+      const used = tk.usedBy?.length ? tk.usedBy.join(', ') : '—';
+      const inUse = tk.markedInUse || (tk.usedBy?.length > 0);
+      return `<tr class="${inUse ? 'token-row-used' : ''}">
+        <td class="td-token-code">${tk.token}</td>
+        <td class="td-time">${fmtDate(tk.expiresAt)} <span style="color:var(--warn);font-size:.72rem">(${timeLeft})</span></td>
+        <td style="font-size:.82rem">${used}</td>
+        <td>${inUse ? `<span class="badge-admin">✓ ${t('em_uso')}</span>` : `<span class="badge-guest">${t('disponivel')}</span>`}</td>
+        <td><label class="token-cb-label">
+          <input type="checkbox" class="cb-token-mark" data-id="${tk.id}" data-marked="${tk.markedInUse}" ${tk.markedInUse ? 'checked' : ''}>
+          <span>${t('em_uso')}</span>
+        </label>
+        <button class="btn-danger btn-sm btn-token-delete" data-id="${tk.id}" title="${t('excluir')}" style="margin-left:6px">✕</button></td>
+      </tr>`;
+    }).join('')}
+    </tbody></table></div>`;
+
+  container.querySelectorAll('.cb-token-mark').forEach(cb =>
+    cb.addEventListener('change', () => toggleTokenMark(cb.dataset.id, cb.dataset.marked === 'true'))
+  );
+  container.querySelectorAll('.btn-token-delete').forEach(b =>
+    b.addEventListener('click', () => deleteToken(b.dataset.id))
+  );
+}
+
 // ── Event bindings ─────────────────────────────────────────────────────────
 function bindEvents() {
   // Nav logo → home
@@ -1589,8 +1878,9 @@ function bindEvents() {
     qs('#pix-modal').style.display = 'none';
     if (state.pixUnsubscribe) { state.pixUnsubscribe(); state.pixUnsubscribe = null; }
   });
+  qs('#pix-modal').addEventListener('mousedown', e => { qs('#pix-modal')._downOnOverlay = e.target === qs('#pix-modal'); });
   qs('#pix-modal').addEventListener('click', e => {
-    if (e.target === qs('#pix-modal')) {
+    if (e.target === qs('#pix-modal') && qs('#pix-modal')._downOnOverlay) {
       qs('#pix-modal').style.display = 'none';
       if (state.pixUnsubscribe) { state.pixUnsubscribe(); state.pixUnsubscribe = null; }
     }
@@ -1620,8 +1910,9 @@ function bindEvents() {
   qs('#btn-checkout').addEventListener('click', openCheckoutModal);
   qs('#btn-confirm-checkout').addEventListener('click', confirmCheckout);
   qs('#btn-cancel-checkout').addEventListener('click', () => qs('#checkout-modal').style.display = 'none');
+  qs('#checkout-modal').addEventListener('mousedown', e => { qs('#checkout-modal')._downOnOverlay = e.target === qs('#checkout-modal'); });
   qs('#checkout-modal').addEventListener('click', e => {
-    if (e.target === qs('#checkout-modal')) qs('#checkout-modal').style.display = 'none';
+    if (e.target === qs('#checkout-modal') && qs('#checkout-modal')._downOnOverlay) qs('#checkout-modal').style.display = 'none';
   });
 
   // Admin tabs
@@ -1644,8 +1935,9 @@ function bindEvents() {
   qs('#btn-cancel-product').addEventListener('click', () => qs('#product-modal').style.display = 'none');
   qs('#btn-delete-product').addEventListener('click', deleteProduct);
   qs('#close-product-modal').addEventListener('click', () => qs('#product-modal').style.display = 'none');
+  qs('#product-modal').addEventListener('mousedown', e => { qs('#product-modal')._downOnOverlay = e.target === qs('#product-modal'); });
   qs('#product-modal').addEventListener('click', e => {
-    if (e.target === qs('#product-modal')) qs('#product-modal').style.display = 'none';
+    if (e.target === qs('#product-modal') && qs('#product-modal')._downOnOverlay) qs('#product-modal').style.display = 'none';
   });
   qs('#prod-image-file').addEventListener('change', e => {
     if (e.target.files[0]) handleProductImageUpload(e.target.files[0]);
@@ -1664,8 +1956,9 @@ function bindEvents() {
   qs('#btn-save-room-edit').addEventListener('click', saveRoomEdit);
   qs('#btn-cancel-room-edit').addEventListener('click', () => qs('#room-edit-modal').style.display = 'none');
   qs('#close-room-edit-modal').addEventListener('click', () => qs('#room-edit-modal').style.display = 'none');
+  qs('#room-edit-modal').addEventListener('mousedown', e => { qs('#room-edit-modal')._downOnOverlay = e.target === qs('#room-edit-modal'); });
   qs('#room-edit-modal').addEventListener('click', e => {
-    if (e.target === qs('#room-edit-modal')) qs('#room-edit-modal').style.display = 'none';
+    if (e.target === qs('#room-edit-modal') && qs('#room-edit-modal')._downOnOverlay) qs('#room-edit-modal').style.display = 'none';
   });
   qs('#room-edit-category-chips').addEventListener('click', e => {
     const chip = e.target.closest('.chip-btn');
@@ -1702,6 +1995,15 @@ function bindEvents() {
   qs('#btn-confirm-upload').addEventListener('click', confirmImport);
   qs('#btn-cancel-upload').addEventListener('click', cancelImport);
   qs('#btn-undo-upload').addEventListener('click', undoUpload);
+
+  // Config tab
+  qs('#btn-save-config').addEventListener('click', saveCheckoutConfig);
+  qs('#btn-generate-tokens').addEventListener('click', generateTokens);
+  qsa('[name="auth-mode"]').forEach(r => r.addEventListener('change', () => {
+    const isToken = qs('#auth-mode-token')?.checked;
+    const tm = qs('#token-management-section');
+    if (tm) tm.style.display = isToken ? '' : 'none';
+  }));
 }
 
 // ── Bootstrap ──────────────────────────────────────────────────────────────
@@ -1710,6 +2012,7 @@ function bindEvents() {
   bindEvents();
   showView('guest-view');
   subscribeProductsGlobal();
+  subscribeCheckoutConfig();
   // Apply saved language and mark active lang button
   setLang(currentLang);
   // Clear guest form after browser autofill has a chance to fire

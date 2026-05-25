@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e ' *)",
+      "PowerShell(\\(Get-Content \"e:\\\\DOCS\\\\LINGUAGENS\\\\sites html e css\\\\Fast_check-out\\\\public\\\\js\\\\app.js\" | Measure-Object -Line\\).Lines)",
+      "PowerShell(Get-ChildItem \"e:\\\\DOCS\\\\LINGUAGENS\\\\sites html e css\\\\Fast_check-out\\\\functions\" | Where-Object { $_.PSIsContainer -eq $false } | Select-Object Name)",
+      "Bash(firebase deploy *)"
+    ]
+  }
+}

@@ -73,5 +73,17 @@ service cloud.firestore {
       allow create: if isAdmin();
       allow update, delete: if false;
     }
+
+    // Config do checkout: leitura pública (hóspede precisa), escrita somente admin
+    match /config/{configId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Tokens diários: leitura pública (hóspede precisa validar), CRUD somente admin
+    match /dailyTokens/{tokenId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
   }
 }

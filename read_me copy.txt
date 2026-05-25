@@ -371,3 +371,39 @@ curl -X POST "https://api.mercadopago.com/v1/payments/TEST_PAYMENT_ID/simulate_p
 Sobre configuração do Mercado Pago: a Access Token de produção (APP_USR-...) está correta. Para o PIX funcionar em produção precisa verificar no painel 
 MP se: (1) a conta está com identidade verificada (KYC completo), (2) existe uma chave PIX cadastrada na conta MP, e (3) o webhook está configurado com a 
 URL  https://us-central1-fast-checkout-hotel.cloudfunctions.net/mercadoPagoWebhook com evento "Pagamentos" selecionado.
+
+---
+
+Pagamento por Cartão e Google Pay — Setup
+O código do servidor já está pronto em functions/index.js (função createCardPreference). Só falta configurar o Access Token do Mercado Pago:
+
+Passo 1 — Criar conta Mercado Pago Developer
+Acesse mercadopago.com.br e crie/acesse sua conta de negócio
+Vá em Sua conta → Ferramentas do desenvolvedor → Suas aplicações
+Crie uma aplicação com nome "Fast Check-Out Hotel"
+Em Credenciais de produção copie o Access Token (começa com APP_USR-...)
+Para testes use as Credenciais de teste (começa com TEST-...)
+Passo 2 — Configurar o Access Token no Firebase
+No terminal, dentro da pasta do projeto:
+
+
+firebase functions:secrets:set MP_ACCESS_TOKEN
+# Cole o token quando solicitado (ex: APP_USR-1234...)
+Passo 3 — Deploy das Functions
+
+firebase deploy --only functions
+Passo 4 — Registrar a URL de webhook no Mercado Pago
+Na sua aplicação MP → Notificações (IPN/Webhooks):
+
+URL: https://us-central1-fast-checkout-hotel.cloudfunctions.net/mercadoPagoWebhook
+Eventos: payment
+Passo 5 — Testar em sandbox
+Use o Access Token de teste (TEST-...) primeiro. O MP fornece cartões de teste na documentação deles.
+
+O que já funciona automaticamente após o setup:
+
+Hóspede clica "Cartão / Google Pay" → redireciona para página Mercado Pago (suporta cartão de crédito, débito e Google Pay)
+Após pagamento aprovado → webhook atualiza saldo para zero + cria notificação para o admin
+Hóspede é redirecionado de volta ao site já com saldo zerado e pode fazer o check-out.
+
+----
