@@ -1639,22 +1639,24 @@ function handleMPReturn() {
   history.replaceState({}, '', location.pathname);
 
   if (status === 'success') {
-    toast('✅ Pagamento aprovado! Faça o check-out agora.', 'success', 8000);
+    toast('✅ Pagamento aprovado! Fazendo o check-out agora…', 'success', 10000);
     if (roomId) {
-      setTimeout(() => db.collection('rooms').doc(roomId).get().then(doc => {
-        if (doc.exists && doc.data().status === 'active') {
-          state.foundRoom = { id: doc.id, ...doc.data() };
-          state.cart = [];
-          renderGuestBalance(state.foundRoom);
-          qs('#products-section').style.display = '';
-          renderProductsGuest(state.allProducts);
-        }
-      }), 1200);
+      // Real-time listener: catches webhook update even if it arrives a few seconds late
+      const unsub = db.collection('rooms').doc(roomId).onSnapshot(doc => {
+        if (!doc.exists || doc.data().status !== 'active') { unsub(); return; }
+        state.foundRoom = { id: doc.id, ...doc.data() };
+        state.cart = [];
+        renderGuestBalance(state.foundRoom);
+        qs('#products-section').style.display = '';
+        renderProductsGuest(state.allProducts);
+        if ((doc.data().balance || 0) === 0) unsub(); // stop once zeroed
+      }, () => unsub());
+      setTimeout(unsub, 30000); // safety: stop after 30s no matter what
     }
   } else if (status === 'failure') {
-    toast('❌ Pagamento recusado. Tente novamente.', 'error');
+    toast('❌ Pagamento recusado. Tente novamente ou use PIX.', 'error', 8000);
   } else if (status === 'pending') {
-    toast('⏳ Pagamento pendente. Aguarde a confirmação.', 'warning');
+    toast('⏳ Pagamento em análise. Você receberá confirmação por e-mail.', 'warning', 8000);
   }
 }
 

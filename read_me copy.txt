@@ -374,36 +374,63 @@ URL  https://us-central1-fast-checkout-hotel.cloudfunctions.net/mercadoPagoWebho
 
 ---
 
-Pagamento por Cartão e Google Pay — Setup
-O código do servidor já está pronto em functions/index.js (função createCardPreference). Só falta configurar o Access Token do Mercado Pago:
+Passo a passo — Cartão de Crédito e Google Pay
+O PIX já funciona, então sua conta MP e o Access Token já estão configurados. Os passos abaixo são apenas para habilitar o Checkout Pro (cartão/Google Pay).
 
-Passo 1 — Criar conta Mercado Pago Developer
-Acesse mercadopago.com.br e crie/acesse sua conta de negócio
-Vá em Sua conta → Ferramentas do desenvolvedor → Suas aplicações
-Crie uma aplicação com nome "Fast Check-Out Hotel"
-Em Credenciais de produção copie o Access Token (começa com APP_USR-...)
-Para testes use as Credenciais de teste (começa com TEST-...)
-Passo 2 — Configurar o Access Token no Firebase
-No terminal, dentro da pasta do projeto:
+Passo 1 — Habilitar o Checkout Pro na sua aplicação MP
+Acesse mercadopago.com.br/developers/panel/app
+Clique na sua aplicação Fast Check-Out Hotel (ou crie uma se não tiver)
+Na aba "Checkout Pro" → verifique se está habilitado
+Em "Meios de pagamento" confirme que Cartão de crédito, Cartão de débito e Google Pay estão marcados
+Passo 2 — Registrar a URL do Webhook
+Na sua aplicação MP → aba "Notificações IPN / Webhooks":
+
+URL do Webhook:
+
+https://mercadopagowebhook-5fa5s6ykhq-uc.a.run.app
+Evento a ativar: payment ✓
+Clique em Salvar
+⚠️ Essa URL também recebe as notificações do PIX. Se você já tinha um webhook cadastrado com a URL antiga (cloudfunctions.net/...), substitua por esta nova.
+
+Passo 3 — Testar em Sandbox primeiro
+Na sua aplicação MP mude temporariamente para credenciais de teste (TEST-...) e no Firebase:
 
 
 firebase functions:secrets:set MP_ACCESS_TOKEN
-# Cole o token quando solicitado (ex: APP_USR-1234...)
-Passo 3 — Deploy das Functions
-
+# Cole o token de TESTE quando pedir
 firebase deploy --only functions
-Passo 4 — Registrar a URL de webhook no Mercado Pago
-Na sua aplicação MP → Notificações (IPN/Webhooks):
+Cards de teste estão em: mercadopago.com.br/developers/pt/docs/checkout-pro/additional-content/test-cards
 
-URL: https://us-central1-fast-checkout-hotel.cloudfunctions.net/mercadoPagoWebhook
-Eventos: payment
-Passo 5 — Testar em sandbox
-Use o Access Token de teste (TEST-...) primeiro. O MP fornece cartões de teste na documentação deles.
+Números para simular:
 
-O que já funciona automaticamente após o setup:
+Cartão	Número	CVV	Resultado
+Visa aprovado	4235 6477 2802 5682	qualquer 3 dig.	Aprovado
+Mastercard recusado	5031 7557 3453 0604	qualquer	Recusado
+Passo 4 — Ativar produção
+Quando os testes passarem:
 
-Hóspede clica "Cartão / Google Pay" → redireciona para página Mercado Pago (suporta cartão de crédito, débito e Google Pay)
-Após pagamento aprovado → webhook atualiza saldo para zero + cria notificação para o admin
-Hóspede é redirecionado de volta ao site já com saldo zerado e pode fazer o check-out.
 
+firebase functions:secrets:set MP_ACCESS_TOKEN
+# Cole o Access Token de PRODUÇÃO (APP_USR-...)
+firebase deploy --only functions
+Como funciona o fluxo completo
+
+Hóspede clica "Cartão / Google Pay"
+       ↓
+createCardPreference (Firebase Function)
+       ↓
+Redireciona para checkout.mercadopago.com.br
+       ↓
+Hóspede paga com cartão ou Google Pay
+       ↓
+MP dispara webhook → mercadoPagoWebhook (Firebase Function)
+       ↓
+Firestore: saldo = 0 + notificação admin
+       ↓
+MP redireciona de volta: ?payment=success&roomId=...
+       ↓
+Site mostra saldo zerado em tempo real → hóspede faz check-out
+Google Pay aparece automaticamente no checkout MP quando o hóspede está em Android ou Chrome desktop com um cartão cadastrado no Google. 
+Não requer nenhuma configuração extra da sua parte.
+ 
 ----

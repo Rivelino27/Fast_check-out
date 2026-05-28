@@ -7,9 +7,9 @@ const { MercadoPagoConfig, Payment, Preference } = require('mercadopago');
 admin.initializeApp();
 const db = admin.firestore();
 
-const PROJECT     = process.env.GCLOUD_PROJECT || 'fast-checkout-hotel';
 const SITE_URL    = process.env.SITE_URL    || 'https://fast-checkout-hotel.web.app';
-const WEBHOOK_URL = `https://us-central1-${PROJECT}.cloudfunctions.net/mercadoPagoWebhook`;
+// 2nd-gen Cloud Run URL (shown after each deploy as "Function URL (mercadoPagoWebhook)")
+const WEBHOOK_URL = process.env.WEBHOOK_URL || 'https://mercadopagowebhook-5fa5s6ykhq-uc.a.run.app';
 
 function getMPClient() {
   const accessToken = process.env.MP_ACCESS_TOKEN;
@@ -90,7 +90,15 @@ exports.createCardPreference = functions.https.onCall(async (request) => {
         failure: `${SITE_URL}?payment=failure&roomId=${roomId}`,
         pending: `${SITE_URL}?payment=pending&roomId=${roomId}`,
       },
-      auto_return:          'approved',
+      auto_return: 'approved',
+      // Explicitly allow credit/debit cards + Google Pay; exclude boleto and PIX
+      payment_methods: {
+        excluded_payment_types: [
+          { id: 'ticket' },   // boleto
+          { id: 'atm' },      // caixa eletrônico
+        ],
+        installments: 12,     // permite parcelamento em até 12x
+      },
       notification_url:     WEBHOOK_URL,
       statement_descriptor: 'HOTEL CHECKOUT',
       metadata:             { roomId, roomNumber, guestName },
