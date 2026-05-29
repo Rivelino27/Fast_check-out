@@ -1,3 +1,5 @@
+menu adm https://fast-checkout-hotel.web.app//admin-login-r27
+
 Run npm install inside functions/ (needed after firebase-functions was bumped to ^6.0.0):
 
 

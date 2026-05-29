@@ -432,5 +432,35 @@ MP redireciona de volta: ?payment=success&roomId=...
 Site mostra saldo zerado em tempo real → hóspede faz check-out
 Google Pay aparece automaticamente no checkout MP quando o hóspede está em Android ou Chrome desktop com um cartão cadastrado no Google. 
 Não requer nenhuma configuração extra da sua parte.
+
+Solução: criar nova aplicação MP com Checkout Pro
+Passo 1 — Criar a nova aplicação
+Acesse: mercadopago.com.br/developers/panel/app
+Clique em "Criar aplicação" (botão azul no canto)
+Preencha:
+Nome: Fast Check-Out Hotel
+Para que você vai usar? → Pagamentos online
+Integração: → selecione "Checkout Pro" ← importante
+Clique em Salvar
+Passo 2 — Pegar o novo Access Token
+Dentro da nova aplicação → aba "Credenciais"
+
+Você verá dois tokens — pegue o Access Token (não a Public Key):
+
+
+Produção:  APP_USR-1234567890-...  ← esse
+Teste:     TEST-1234567890-...     ← ou esse para testar
+Passo 3 — Atualizar o segredo no Firebase
+Abra o terminal na pasta do projeto e rode:
+
+
+firebase functions:secrets:set MP_ACCESS_TOKEN
+Quando aparecer ? Enter a value for MP_ACCESS_TOKEN: — cole o novo token e Enter.
+
+O novo token funciona para PIX e cartão ao mesmo tempo — não precisa mudar mais nada no código.
+
+Passo 4 — Redeploy
+
+firebase deploy --only functions
  
 ----

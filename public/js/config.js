@@ -14,7 +14,7 @@ const firebaseConfig = {
 
 // Chave pública do Mercado Pago (começa com APP_USR-...)
 // Para testes, use a chave de SANDBOX
-const MERCADO_PAGO_PUBLIC_KEY = "APP_USR-3ac3ed13-0d65-4449-a073-ea202a37fe69";
+const MERCADO_PAGO_PUBLIC_KEY = "APP_USR-4b23c2e3-e4eb-4304-bcd9-279ae99fe858";
 
 // URL das suas Cloud Functions (preenchida após o deploy)
 // Exemplo: "https://us-central1-fast-checkout-hotel.cloudfunctions.net"

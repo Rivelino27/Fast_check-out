@@ -1199,18 +1199,21 @@ tr.checkout-new td:first-child {
 .radio-opt:hover { color: var(--text); }
 
 /* ── Token table styles ──────────────────────────────────────── */
+#tokens-list table td { padding: 5px 12px; }
+#tokens-list table th { padding: 6px 12px; }
 .td-token-code {
   font-family: 'Outfit', system-ui, sans-serif;
-  font-size: 1.3rem; font-weight: 700;
-  color: var(--cyan); letter-spacing: 4px;
+  font-size: 1.1rem; font-weight: 700;
+  color: var(--cyan); letter-spacing: 3px;
+  white-space: nowrap;
 }
 .token-cb-label {
   display: inline-flex; align-items: center; gap: 5px;
-  cursor: pointer; font-size: .82rem; color: var(--text-sub);
+  cursor: pointer; font-size: .78rem; color: var(--text-sub);
   white-space: nowrap; vertical-align: middle;
 }
 .token-cb-label input[type="checkbox"] {
-  width: 15px; height: 15px; accent-color: var(--blue); cursor: pointer;
+  width: 13px; height: 13px; accent-color: var(--blue); cursor: pointer;
 }
 .token-cb-label:hover { color: var(--text); }
 .token-row-used td { opacity: .55; }

@@ -14,12 +14,14 @@ const WEBHOOK_URL = process.env.WEBHOOK_URL || 'https://mercadopagowebhook-5fa5s
 function getMPClient() {
   const accessToken = process.env.MP_ACCESS_TOKEN;
   if (!accessToken) throw new Error('MP_ACCESS_TOKEN não configurado');
+  console.log('[MP] Token prefix:', accessToken.substring(0, 22) + '...');
   return new MercadoPagoConfig({ accessToken, options: { timeout: 8000 } });
 }
 
 // ─── PIX ─────────────────────────────────────────────────────────────────────
 exports.createPixPayment = functions.https.onCall(async (request) => {
   const { amount, roomId, guestName, roomNumber, rsv, items } = request.data;
+  console.log('[PIX] Iniciando:', { amount, roomId, roomNumber, guestName });
 
   const amountNum = parseFloat(Number(amount).toFixed(2));
   if (!isFinite(amountNum) || amountNum <= 0) {
@@ -27,10 +29,18 @@ exports.createPixPayment = functions.https.onCall(async (request) => {
   }
   if (!roomId) throw new functions.https.HttpsError('invalid-argument', 'roomId obrigatório');
 
-  const client        = getMPClient();
+  let client;
+  try {
+    client = getMPClient();
+  } catch (e) {
+    console.error('[PIX] Erro ao obter cliente MP:', e.message);
+    throw new functions.https.HttpsError('internal', e.message);
+  }
   const paymentClient = new Payment(client);
 
-  const response = await paymentClient.create({
+  let response;
+  try {
+    response = await paymentClient.create({
     body: {
       transaction_amount: amountNum,
       description:        `Hotel Checkout — Quarto ${roomNumber} — ${guestName}`,
@@ -41,6 +51,11 @@ exports.createPixPayment = functions.https.onCall(async (request) => {
       statement_descriptor: 'HOTEL CHECKOUT',
     },
   });
+  } catch (e) {
+    console.error('[PIX] Erro MP API:', e?.cause?.message || e?.message, e?.cause?.status);
+    throw new functions.https.HttpsError('internal', 'Erro ao criar pagamento PIX: ' + (e?.cause?.message || e.message));
+  }
+  console.log('[PIX] Pagamento criado:', response.id, response.status);
 
   const pixCode       = response.point_of_interaction?.transaction_data?.qr_code        || '';
   const pixCodeBase64 = response.point_of_interaction?.transaction_data?.qr_code_base64 || '';
@@ -68,42 +83,55 @@ exports.createPixPayment = functions.https.onCall(async (request) => {
 // ─── Cartão / Google Pay (Checkout Pro) ──────────────────────────────────────
 exports.createCardPreference = functions.https.onCall(async (request) => {
   const { amount, roomId, guestName, roomNumber, rsv, items } = request.data;
+  console.log('[CARD] Iniciando:', { amount, roomId, roomNumber, guestName });
 
   const amountNum = parseFloat(Number(amount).toFixed(2));
   if (!isFinite(amountNum) || amountNum <= 0) {
     throw new functions.https.HttpsError('invalid-argument', 'Valor inválido');
   }
 
-  const client            = getMPClient();
+  let client;
+  try {
+    client = getMPClient();
+  } catch (e) {
+    console.error('[CARD] Erro ao obter cliente MP:', e.message);
+    throw new functions.https.HttpsError('internal', e.message);
+  }
   const preferenceClient  = new Preference(client);
 
   const preferenceItems = items && items.length > 0
     ? items.map(i => ({ title: i.name, quantity: 1, unit_price: Number(i.price), currency_id: 'BRL' }))
     : [{ title: `Hotel Checkout — Quarto ${roomNumber}`, quantity: 1, unit_price: amountNum, currency_id: 'BRL' }];
 
-  const response = await preferenceClient.create({
-    body: {
-      items: preferenceItems,
-      payer: { name: guestName },
-      back_urls: {
-        success: `${SITE_URL}?payment=success&roomId=${roomId}`,
-        failure: `${SITE_URL}?payment=failure&roomId=${roomId}`,
-        pending: `${SITE_URL}?payment=pending&roomId=${roomId}`,
+  let response;
+  try {
+    response = await preferenceClient.create({
+      body: {
+        items: preferenceItems,
+        payer: { name: guestName },
+        back_urls: {
+          success: `${SITE_URL}?payment=success&roomId=${roomId}`,
+          failure: `${SITE_URL}?payment=failure&roomId=${roomId}`,
+          pending: `${SITE_URL}?payment=pending&roomId=${roomId}`,
+        },
+        auto_return: 'approved',
+        payment_methods: {
+          excluded_payment_types: [
+            { id: 'ticket' },
+            { id: 'atm' },
+          ],
+          installments: 12,
+        },
+        notification_url:     WEBHOOK_URL,
+        statement_descriptor: 'HOTEL CHECKOUT',
+        metadata:             { roomId, roomNumber, guestName },
       },
-      auto_return: 'approved',
-      // Explicitly allow credit/debit cards + Google Pay; exclude boleto and PIX
-      payment_methods: {
-        excluded_payment_types: [
-          { id: 'ticket' },   // boleto
-          { id: 'atm' },      // caixa eletrônico
-        ],
-        installments: 12,     // permite parcelamento em até 12x
-      },
-      notification_url:     WEBHOOK_URL,
-      statement_descriptor: 'HOTEL CHECKOUT',
-      metadata:             { roomId, roomNumber, guestName },
-    },
-  });
+    });
+  } catch (e) {
+    console.error('[CARD] Erro MP API:', e?.cause?.message || e?.message, e?.cause?.status);
+    throw new functions.https.HttpsError('internal', 'Erro ao criar preferência: ' + (e?.cause?.message || e.message));
+  }
+  console.log('[CARD] Preferência criada:', response.id);
 
   const paymentRef = await db.collection('payments').add({
     roomId,

@@ -20,23 +20,23 @@
     <div class="nav-actions">
       <div class="lang-switcher">
         <button class="lang-btn active" data-lang="pt" title="Português">
-          <img src="https://flagcdn.com/20x15/br.png" alt="PT">
+          <img src="https://flagcdn.com/w40/br.png" srcset="https://flagcdn.com/w80/br.png 2x" alt="PT">
         </button>
         <button class="lang-btn" data-lang="en" title="English">
-          <img src="https://flagcdn.com/20x15/us.png" alt="EN">
+          <img src="https://flagcdn.com/w40/us.png" srcset="https://flagcdn.com/w80/us.png 2x" alt="EN">
         </button>
         <button class="lang-btn" data-lang="es" title="Español">
-          <img src="https://flagcdn.com/20x15/es.png" alt="ES">
+          <img src="https://flagcdn.com/w40/es.png" srcset="https://flagcdn.com/w80/es.png 2x" alt="ES">
         </button>
         <button class="lang-btn" data-lang="zh" title="中文">
-          <img src="https://flagcdn.com/20x15/cn.png" alt="ZH">
+          <img src="https://flagcdn.com/w40/cn.png" srcset="https://flagcdn.com/w80/cn.png 2x" alt="ZH">
         </button>
       </div>
       <button id="btn-notifications" class="btn-icon" style="display:none" title="Notificações">
         <span>🔔</span>
         <span id="notification-badge" class="badge" style="display:none">0</span>
       </button>
-      <button id="btn-admin-login" class="btn-ghost" data-i18n="area_admin">Área Admin</button>
+      <button id="btn-admin-login" class="btn-ghost" data-i18n="area_admin" style="display:none">Área Admin</button>
       <button id="btn-admin-logout" class="btn-ghost" style="display:none" data-i18n="sair">Sair</button>
     </div>
   </nav>
@@ -381,10 +381,12 @@
 
         <div id="token-management-section" class="config-section surface" style="max-width:640px;margin:0 auto;padding:24px;display:none">
           <h3 style="font-family:'Outfit',system-ui,sans-serif;margin-bottom:16px" data-i18n="tokens_diarios">Tokens Diários</h3>
-          <p style="color:var(--text-sub);font-size:.88rem;margin-bottom:16px" data-i18n="tokens_desc">Cada token tem validade de 24 horas e pode ser usado por múltiplos quartos.</p>
-          <div style="display:flex;gap:10px;align-items:center;margin-bottom:20px;flex-wrap:wrap">
-            <input type="number" id="token-count-input" class="input-neon input-sm" value="300" min="1" max="490" style="max-width:80px">
-            <label style="color:var(--text-sub);font-size:.84rem" data-i18n="tokens_qtd">tokens</label>
+          <p style="color:var(--text-sub);font-size:.88rem;margin-bottom:16px">Cada token pode ser usado por múltiplos quartos. Use −1d / +1d para ajustar a expiração individualmente.</p>
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:20px;flex-wrap:wrap">
+            <input type="number" id="token-count-input" class="input-neon input-sm" value="300" min="1" max="490" style="max-width:72px">
+            <span style="color:var(--text-sub);font-size:.84rem">tokens por</span>
+            <input type="number" id="token-days-input" class="input-neon input-sm" value="5" min="1" max="365" style="max-width:60px">
+            <span style="color:var(--text-sub);font-size:.84rem">dias</span>
             <button id="btn-generate-tokens" class="btn-secondary">🔑 <span data-i18n="gerar_tokens">Gerar Tokens</span></button>
           </div>
           <div id="tokens-list">

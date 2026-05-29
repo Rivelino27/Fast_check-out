@@ -116,7 +116,7 @@ auth.onAuthStateChanged(async user => {
   } else {
     state.isAdmin      = false;
     state.isSuperAdmin = false;
-    qs('#btn-admin-login').style.display  = '';
+    qs('#btn-admin-login').style.display  = sessionStorage.getItem('adminUnlocked') ? '' : 'none';
     qs('#btn-admin-logout').style.display = 'none';
     qs('#btn-notifications').style.display = 'none';
     stopAdminSubs();
@@ -1732,17 +1732,18 @@ function generateUniqueDigitToken() {
 }
 
 async function generateTokens() {
-  const count = Math.max(1, Math.min(490, parseInt(qs('#token-count-input')?.value) || 300));
-  const btn   = qs('#btn-generate-tokens');
+  const count   = Math.max(1, Math.min(490, parseInt(qs('#token-count-input')?.value) || 300));
+  const days    = Math.max(1, Math.min(365, parseInt(qs('#token-days-input')?.value)  || 5));
+  const btn     = qs('#btn-generate-tokens');
   btn.disabled = true;
   try {
     const now     = new Date();
-    const expires = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    const expires = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
     const existing = new Set(state.allTokens.map(tk => tk.token));
     const batch = db.batch();
     let created = 0;
     let attempts = 0;
-    while (created < count && attempts < 100) {
+    while (created < count && attempts < count * 4) {
       attempts++;
       const token = generateUniqueDigitToken();
       if (existing.has(token)) continue;
@@ -1760,6 +1761,21 @@ async function generateTokens() {
     toast('Erro: ' + err.message, 'error');
   } finally {
     btn.disabled = false;
+  }
+}
+
+async function adjustTokenExpiry(tokenId, deltaDays) {
+  try {
+    const snap = await db.collection('dailyTokens').doc(tokenId).get();
+    if (!snap.exists) return;
+    const current = snap.data().expiresAt?.toDate?.() || new Date();
+    const newExp  = new Date(current.getTime() + deltaDays * 24 * 60 * 60 * 1000);
+    await db.collection('dailyTokens').doc(tokenId).update({
+      expiresAt: firebase.firestore.Timestamp.fromDate(newExp),
+    });
+    toast(`Expiração ${deltaDays > 0 ? '+' : ''}${deltaDays}d`, 'success', 2000);
+  } catch (err) {
+    toast('Erro: ' + err.message, 'error');
   }
 }
 
@@ -1812,25 +1828,39 @@ function renderTokensList() {
       <th>Token</th><th>${t('token_expira')}</th><th>${t('token_usado_em')}</th><th>${t('th_status')}</th><th>${t('th_acoes')}</th>
     </tr></thead>
     <tbody>${sorted.map(tk => {
-      const exp  = tk.expiresAt?.toDate ? tk.expiresAt.toDate() : new Date(tk.expiresAt);
-      const mins = Math.round((exp - Date.now()) / 60000);
-      const timeLeft = mins > 60 ? `${Math.round(mins/60)}h` : `${mins}m`;
-      const used = tk.usedBy?.length ? tk.usedBy.join(', ') : '—';
-      const inUse = tk.markedInUse || (tk.usedBy?.length > 0);
+      const exp    = tk.expiresAt?.toDate ? tk.expiresAt.toDate() : new Date(tk.expiresAt);
+      const diffMs = exp - Date.now();
+      const diffD  = Math.floor(diffMs / 86400000);
+      const diffH  = Math.floor((diffMs % 86400000) / 3600000);
+      const timeLeft = diffD > 0 ? `${diffD}d ${diffH}h` : diffH > 0 ? `${diffH}h` : `${Math.round(diffMs/60000)}m`;
+      const used   = tk.usedBy?.length ? tk.usedBy.join(', ') : '—';
+      const inUse  = tk.markedInUse || (tk.usedBy?.length > 0);
       return `<tr class="${inUse ? 'token-row-used' : ''}">
         <td class="td-token-code">${tk.token}</td>
-        <td class="td-time">${fmtDate(tk.expiresAt)} <span style="color:var(--warn);font-size:.72rem">(${timeLeft})</span></td>
+        <td class="td-time" style="font-size:.78rem">${fmtDate(tk.expiresAt)} <span style="color:var(--warn);font-weight:600">(${timeLeft})</span></td>
         <td style="font-size:.82rem">${used}</td>
         <td>${inUse ? `<span class="badge-admin">✓ ${t('em_uso')}</span>` : `<span class="badge-guest">${t('disponivel')}</span>`}</td>
-        <td><label class="token-cb-label">
-          <input type="checkbox" class="cb-token-mark" data-id="${tk.id}" data-marked="${tk.markedInUse}" ${tk.markedInUse ? 'checked' : ''}>
-          <span>${t('em_uso')}</span>
-        </label>
-        <button class="btn-danger btn-sm btn-token-delete" data-id="${tk.id}" title="${t('excluir')}" style="margin-left:6px">✕</button></td>
+        <td>
+          <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">
+            <button class="btn-ghost btn-sm btn-tok-minus" data-id="${tk.id}" title="−1 dia" style="padding:3px 8px;font-size:.78rem">−1d</button>
+            <button class="btn-ghost btn-sm btn-tok-plus"  data-id="${tk.id}" title="+1 dia" style="padding:3px 8px;font-size:.78rem">+1d</button>
+            <label class="token-cb-label">
+              <input type="checkbox" class="cb-token-mark" data-id="${tk.id}" data-marked="${tk.markedInUse}" ${tk.markedInUse ? 'checked' : ''}>
+              <span>${t('em_uso')}</span>
+            </label>
+            <button class="btn-danger btn-sm btn-token-delete" data-id="${tk.id}" title="${t('excluir')}">✕</button>
+          </div>
+        </td>
       </tr>`;
     }).join('')}
     </tbody></table></div>`;
 
+  container.querySelectorAll('.btn-tok-minus').forEach(b =>
+    b.addEventListener('click', () => adjustTokenExpiry(b.dataset.id, -1))
+  );
+  container.querySelectorAll('.btn-tok-plus').forEach(b =>
+    b.addEventListener('click', () => adjustTokenExpiry(b.dataset.id, +1))
+  );
   container.querySelectorAll('.cb-token-mark').forEach(cb =>
     cb.addEventListener('change', () => toggleTokenMark(cb.dataset.id, cb.dataset.marked === 'true'))
   );
@@ -2008,8 +2038,26 @@ function bindEvents() {
   }));
 }
 
+// ── Admin secret-path unlock ───────────────────────────────────────────────
+// Access /admin-login (or any path set here) to reveal the admin login button.
+// Change ADMIN_SECRET_PATH to any secret string (e.g. '/88wx675887').
+const ADMIN_SECRET_PATH = '/admin-login-r27';
+
+function checkAdminRoute() {
+  const path = window.location.pathname;
+  if (path === ADMIN_SECRET_PATH) {
+    sessionStorage.setItem('adminUnlocked', '1');
+    history.replaceState({}, '', '/');
+  }
+  if (sessionStorage.getItem('adminUnlocked')) {
+    const btn = qs('#btn-admin-login');
+    if (btn) btn.style.display = '';
+  }
+}
+
 // ── Bootstrap ──────────────────────────────────────────────────────────────
 (function () {
+  checkAdminRoute();
   handleMPReturn();
   bindEvents();
   showView('guest-view');
