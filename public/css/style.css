@@ -892,7 +892,7 @@ td.td-time  { color: var(--text-sub); font-size: .76rem; white-space: nowrap; }
   .btn-add-prod     { font-size: .7rem; padding: 4px 8px; }
 
   .payment-buttons  { flex-direction: column; }
-  .btn-pix, .btn-card { min-height: 48px; }
+  .btn-pix, .btn-card, .btn-googlepay { min-height: 48px; }
 
   /* Admin tabs em scroll horizontal */
   .admin-tabs { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; margin-left: 0; width: 100%; }
@@ -1218,6 +1218,29 @@ tr.checkout-new td:first-child {
 .token-cb-label:hover { color: var(--text); }
 .token-row-used td { opacity: .55; }
 .token-row-used .td-token-code { opacity: .6; filter: saturate(.4); }
+
+/* ── Google Pay button ───────────────────────────────────────── */
+.btn-googlepay {
+  flex: 1; padding: 13px 14px;
+  font-size: .8rem; font-weight: 700; letter-spacing: .8px; text-transform: uppercase;
+  color: #fff;
+  background: #000;
+  border: 1.5px solid rgba(255,255,255,0.15);
+  border-radius: var(--radius);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  transition: all var(--t);
+  min-height: 52px;
+}
+.btn-googlepay:hover {
+  background: #1a1a1a;
+  border-color: rgba(255,255,255,0.3);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 24px rgba(0,0,0,0.4);
+}
+
+/* ── Audit log filter bar tweaks ─────────────────────────────── */
+#filter-audit-text { flex: 1; min-width: 160px; }
 
 /* ── Mobile navbar abbreviation ──────────────────────────────── */
 @media (max-width: 440px) {

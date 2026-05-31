@@ -33,6 +33,8 @@ const state = {
   uploadMetaUnsubscribe: null,
   configUnsubscribe:     null,
   tokensUnsubscribe:     null,
+  auditUnsubscribe:      null,
+  allAudit:              [],
   checkoutConfig:        { requiresToken: false },
   roomQuickFilter:       '',
   checkinSort:           { col: 'roomNumber', dir: 1 },
@@ -90,6 +92,7 @@ function showTab(id) {
   if (id === 'checkouts') renderCheckouts(state.allCheckouts);
   if (id === 'payments')  renderPayments(state.allPayments);
   if (id === 'history')   renderHistory(state.allHistory);
+  if (id === 'audit')     renderAuditLog();
   if (id === 'config')    renderConfigTab();
 }
 
@@ -291,6 +294,7 @@ function refreshGuestUI(balance) {
     const totalEl = qs('#payment-total-amount');
     if (totalEl) totalEl.textContent = R$(grandTotal);
     if (coSection) coSection.style.display = 'none';
+    initGooglePay();
   } else {
     if (paySection) paySection.style.display = 'none';
     if (coSection) coSection.style.display = '';
@@ -298,7 +302,9 @@ function refreshGuestUI(balance) {
 }
 
 function removeFromCart(idx) {
+  const removed = state.cart[idx];
   state.cart.splice(idx, 1);
+  if (removed) logAudit('cart_item_removed', { item: removed.name, price: removed.price });
   refreshGuestUI(state.foundRoom.balance || 0);
 }
 
@@ -306,6 +312,7 @@ function addToCartById(productId) {
   const product = state.allProducts.find(p => p.id === productId);
   if (!product) return;
   state.cart.push({ name: product.name, price: product.price, productId: product.id });
+  logAudit('cart_item_added', { item: product.name, price: product.price });
   refreshGuestUI(state.foundRoom.balance || 0);
   toast(`${product.name} adicionado.`, 'success', 2000);
 }
@@ -505,6 +512,21 @@ async function handleProductImageUpload(file) {
   }
 }
 
+// ── Audit Log ──────────────────────────────────────────────────────────────
+function logAudit(action, details = {}) {
+  const room = state.foundRoom;
+  db.collection('auditLog').add({
+    timestamp:   firebase.firestore.FieldValue.serverTimestamp(),
+    action,
+    actor:       state.isAdmin ? 'admin' : 'guest',
+    actorEmail:  state.user?.email || null,
+    roomId:      room?.id       || details.roomId      || null,
+    roomNumber:  room?.roomNumber || details.roomNumber || null,
+    guestName:   room?.guestName  || details.guestName  || null,
+    details,
+  }).catch(() => {});
+}
+
 // ── Guest — PIX ────────────────────────────────────────────────────────────
 async function startPixPayment() {
   const bal       = state.foundRoom.balance || 0;
@@ -519,6 +541,7 @@ async function startPixPayment() {
   qs('#pix-modal').style.display      = 'flex';
 
   try {
+    logAudit('payment_pix_initiated', { amount: total, items: state.cart.map(i => i.name) });
     const { data } = await fns.httpsCallable('createPixPayment')({
       amount:     total,
       roomId:     state.foundRoom.id,
@@ -547,12 +570,14 @@ async function startPixPayment() {
 
   } catch (err) {
     qs('#pix-modal').style.display = 'none';
+    logAudit('payment_pix_error', { error: err.message });
     toast('Erro ao gerar PIX: ' + (err.message || 'Tente novamente.'), 'error');
     console.error(err);
   }
 }
 
 function onPaymentApproved() {
+  logAudit('payment_approved', { amount: (state.foundRoom?.balance || 0) + state.cart.reduce((s, i) => s + i.price, 0) });
   if (state.pixUnsubscribe) { state.pixUnsubscribe(); state.pixUnsubscribe = null; }
 
   // Save for guest receipt before clearing state
@@ -590,6 +615,7 @@ async function startCardPayment() {
   btn.disabled = true;
 
   try {
+    logAudit('payment_card_initiated', { amount: total, items: state.cart.map(i => i.name) });
     const { data } = await fns.httpsCallable('createCardPreference')({
       amount:     total,
       roomId:     state.foundRoom.id,
@@ -600,10 +626,121 @@ async function startCardPayment() {
     });
     window.location.href = data.initPoint;
   } catch (err) {
+    logAudit('payment_card_error', { amount: total, error: err.message });
     toast('Erro ao iniciar pagamento: ' + err.message, 'error');
-    btn.textContent = 'Cartão / Google Pay';
+    btn.textContent = 'Pagar com Cartão';
     btn.disabled = false;
   }
+}
+
+// ── Guest — Google Pay (Stripe) ────────────────────────────────────────────
+// Substitua pela sua Publishable Key do Stripe em stripe.com/dashboard
+const STRIPE_PK = 'pk_live_COLOQUE_SUA_CHAVE_PUBLICA_STRIPE_AQUI';
+
+let _stripeJs   = null;
+let _gpRequest  = null;
+let _gpReady    = false;
+
+async function initGooglePay() {
+  const btn = qs('#btn-pay-googlepay');
+  if (!btn) return;
+  if (!STRIPE_PK || STRIPE_PK.includes('COLOQUE')) { btn.style.display = 'none'; return; }
+  if (typeof Stripe === 'undefined') { btn.style.display = 'none'; return; }
+
+  const bal   = state.foundRoom?.balance || 0;
+  const total = +(bal + state.cart.reduce((s, i) => s + i.price, 0)).toFixed(2);
+  if (total <= 0) { btn.style.display = 'none'; return; }
+
+  _stripeJs  = _stripeJs || Stripe(STRIPE_PK);
+  _gpRequest = _stripeJs.paymentRequest({
+    country:  'BR',
+    currency: 'brl',
+    total:    { label: 'Hotel Fast Check-Out', amount: Math.round(total * 100) },
+    requestPayerName:  false,
+    requestPayerEmail: false,
+  });
+
+  _gpRequest.on('paymentmethod', handleGooglePayMethod);
+
+  const result = await _gpRequest.canMakePayment().catch(() => null);
+  _gpReady = !!(result?.googlePay || result?.applePay);
+  btn.style.display = _gpReady ? '' : 'none';
+}
+
+async function handleGooglePayMethod(event) {
+  const btn = qs('#btn-pay-googlepay');
+  if (btn) { btn.textContent = 'Processando…'; btn.disabled = true; }
+
+  try {
+    const bal   = state.foundRoom.balance || 0;
+    const total = +(bal + state.cart.reduce((s, i) => s + i.price, 0)).toFixed(2);
+
+    logAudit('payment_gpay_initiated', { amount: total, items: state.cart.map(i => i.name) });
+
+    const { data } = await fns.httpsCallable('createStripePaymentIntent')({
+      amount:     total,
+      roomId:     state.foundRoom.id,
+      guestName:  state.foundRoom.guestName,
+      roomNumber: state.foundRoom.roomNumber,
+      rsv:        state.foundRoom.rsv || '',
+      items:      state.cart,
+    });
+
+    const { error, paymentIntent } = await _stripeJs.confirmCardPayment(
+      data.clientSecret,
+      { payment_method: event.paymentMethod.id },
+      { handleActions: false },
+    );
+
+    if (error) {
+      event.complete('fail');
+      logAudit('payment_gpay_error', { amount: total, error: error.message });
+      toast('Google Pay recusado: ' + error.message, 'error');
+      if (btn) { btn.textContent = 'Google Pay'; btn.disabled = false; }
+      return;
+    }
+
+    // Handle 3DS if needed
+    if (paymentIntent.status === 'requires_action') {
+      const { error: actionErr } = await _stripeJs.confirmCardPayment(data.clientSecret);
+      if (actionErr) {
+        event.complete('fail');
+        toast('Autenticação falhou: ' + actionErr.message, 'error');
+        if (btn) { btn.textContent = 'Google Pay'; btn.disabled = false; }
+        return;
+      }
+    }
+
+    event.complete('success');
+
+    await fns.httpsCallable('confirmStripePayment')({
+      paymentIntentId: paymentIntent.id,
+      roomId:          state.foundRoom.id,
+      roomNumber:      state.foundRoom.roomNumber,
+      guestName:       state.foundRoom.guestName,
+      amount:          total,
+      rsv:             state.foundRoom.rsv || '',
+    });
+
+    logAudit('payment_gpay_success', { amount: total });
+    onPaymentApproved();
+
+  } catch (err) {
+    event.complete('fail');
+    toast('Erro Google Pay: ' + err.message, 'error');
+    if (btn) { btn.textContent = 'Google Pay'; btn.disabled = false; }
+  }
+}
+
+function startGooglePayPayment() {
+  if (!_gpReady || !_gpRequest) {
+    toast('Google Pay não disponível neste dispositivo. Use Chrome com Google Pay configurado.', 'warning', 6000);
+    return;
+  }
+  const bal   = state.foundRoom?.balance || 0;
+  const total = +(bal + state.cart.reduce((s, i) => s + i.price, 0)).toFixed(2);
+  _gpRequest.update({ total: { label: 'Hotel Fast Check-Out', amount: Math.round(total * 100) } });
+  _gpRequest.show();
 }
 
 // ── Guest — Checkout ───────────────────────────────────────────────────────
@@ -642,6 +779,7 @@ async function confirmCheckout() {
     });
 
     await batch.commit();
+    logAudit('checkout_completed', { roomNumber: room.roomNumber, guestName: room.guestName, finalBalance: room.balance || 0, method: 'guest' });
     qs('#checkout-modal').style.display = 'none';
     state.foundRoom = null;
     state.cart = [];
@@ -684,17 +822,18 @@ function startAdminSubs() {
   subscribeHistory();
   subscribeUploadMeta();
   subscribeTokens();
+  subscribeAuditLog();
   // subscribeCheckoutConfig is started at boot and must never be stopped
 }
 function stopAdminSubs() {
   [
     state.roomsUnsubscribe, state.checkoutsUnsubscribe, state.notifUnsubscribe,
     state.paymentsUnsubscribe, state.historyUnsubscribe, state.uploadMetaUnsubscribe,
-    state.tokensUnsubscribe,
+    state.tokensUnsubscribe, state.auditUnsubscribe,
   ].forEach(fn => fn && fn());
   state.roomsUnsubscribe = state.checkoutsUnsubscribe = state.notifUnsubscribe =
   state.paymentsUnsubscribe = state.historyUnsubscribe = state.uploadMetaUnsubscribe =
-  state.tokensUnsubscribe = null;
+  state.tokensUnsubscribe = state.auditUnsubscribe = null;
 }
 
 // ── Admin — Rooms ──────────────────────────────────────────────────────────
@@ -1700,6 +1839,7 @@ async function saveCheckoutConfig() {
   btn.disabled = true;
   try {
     await db.collection('config').doc('checkout').set({ requiresToken }, { merge: true });
+    logAudit('config_changed', { requiresToken });
     toast(t('config_salvo'), 'success');
   } catch (err) {
     toast('Erro: ' + err.message, 'error');
@@ -1756,6 +1896,7 @@ async function generateTokens() {
       created++;
     }
     await batch.commit();
+    logAudit('tokens_generated', { count: created, days, expiresAt: expires.toLocaleDateString('pt-BR') });
     toast(`${created} token(s) gerados!`, 'success');
   } catch (err) {
     toast('Erro: ' + err.message, 'error');
@@ -1789,7 +1930,10 @@ async function toggleTokenMark(tokenId, current) {
 
 async function deleteToken(tokenId) {
   try {
+    const snap = await db.collection('dailyTokens').doc(tokenId).get();
+    const tkVal = snap.data()?.token;
     await db.collection('dailyTokens').doc(tokenId).delete();
+    logAudit('token_deleted', { token: tkVal });
     toast('Token removido.', 'info');
   } catch (err) {
     toast('Erro: ' + err.message, 'error');
@@ -1869,6 +2013,86 @@ function renderTokensList() {
   );
 }
 
+// ── Audit Log — Subscribe & Render ────────────────────────────────────────
+function subscribeAuditLog() {
+  if (state.auditUnsubscribe) state.auditUnsubscribe();
+  state.auditUnsubscribe = db.collection('auditLog')
+    .orderBy('timestamp', 'desc').limit(500)
+    .onSnapshot(snap => {
+      state.allAudit = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      renderAuditLog();
+    }, console.error);
+}
+
+const AUDIT_LABELS = {
+  payment_pix_initiated:  { label: 'PIX iniciado',        color: 'var(--cyan)' },
+  payment_pix_error:      { label: 'PIX erro',             color: 'var(--warn)' },
+  payment_card_initiated: { label: 'Cartão iniciado',      color: 'var(--cyan)' },
+  payment_card_error:     { label: 'Cartão erro',          color: 'var(--warn)' },
+  payment_gpay_initiated: { label: 'Google Pay iniciado',  color: 'var(--cyan)' },
+  payment_gpay_success:   { label: 'Google Pay aprovado',  color: 'var(--green)' },
+  payment_gpay_error:     { label: 'Google Pay erro',      color: 'var(--warn)' },
+  payment_approved:       { label: 'Pgto confirmado',      color: 'var(--green)' },
+  cart_item_added:        { label: 'Item adicionado',      color: 'var(--blue)' },
+  cart_item_removed:      { label: 'Item removido',        color: 'var(--text-sub)' },
+  checkout_completed:     { label: 'Check-out realizado',  color: 'var(--green)' },
+  config_changed:         { label: 'Config alterada',      color: '#f59e0b' },
+  tokens_generated:       { label: 'Tokens gerados',       color: '#f59e0b' },
+  token_deleted:          { label: 'Token excluído',       color: 'var(--warn)' },
+  room_edited:            { label: 'Quarto editado',       color: 'var(--blue)' },
+};
+
+function renderAuditLog() {
+  const container = qs('#audit-list');
+  if (!container) return;
+
+  const textF   = (qs('#filter-audit-text')?.value   || '').toLowerCase();
+  const actionF =  qs('#filter-audit-action')?.value  || '';
+  const fromF   =  qs('#filter-audit-from')?.value    || '';
+  const toF     =  qs('#filter-audit-to')?.value      || '';
+
+  let entries = state.allAudit || [];
+
+  if (textF) entries = entries.filter(e =>
+    (e.action || '').includes(textF) ||
+    (e.roomNumber || '').toLowerCase().includes(textF) ||
+    (e.guestName  || '').toLowerCase().includes(textF) ||
+    (e.actorEmail || '').toLowerCase().includes(textF) ||
+    JSON.stringify(e.details || {}).toLowerCase().includes(textF)
+  );
+  if (actionF) entries = entries.filter(e => (e.action || '').startsWith(actionF.replace('payment','payment').replace('cart','cart').replace('checkout','checkout').replace('config','config').replace('token','token').replace('room','room')) || e.action?.includes(actionF));
+  if (fromF) { const d = new Date(fromF); entries = entries.filter(e => e.timestamp?.toDate?.() >= d); }
+  if (toF)   { const d = new Date(toF + 'T23:59:59'); entries = entries.filter(e => e.timestamp?.toDate?.() <= d); }
+
+  if (!entries.length) {
+    container.innerHTML = `<div class="empty-state"><div class="empty-state-icon">📋</div><p>Nenhum registro encontrado.</p></div>`;
+    return;
+  }
+
+  container.innerHTML = `<div class="checkouts-table-wrap"><table>
+    <thead><tr>
+      <th>Data/Hora</th><th>Ação</th><th>Quarto</th><th>Hóspede</th><th>Ator</th><th>Detalhes</th>
+    </tr></thead>
+    <tbody>${entries.map(e => {
+      const meta  = AUDIT_LABELS[e.action] || { label: e.action, color: 'var(--text-sub)' };
+      const dt    = e.timestamp?.toDate ? e.timestamp.toDate().toLocaleString('pt-BR') : '—';
+      const det   = Object.entries(e.details || {})
+        .filter(([k]) => k !== 'items')
+        .map(([k, v]) => `<span style="opacity:.75">${k}:</span> ${v}`)
+        .join(' · ');
+      const items = (e.details?.items || []).join(', ');
+      return `<tr>
+        <td class="td-time" style="white-space:nowrap;font-size:.78rem">${dt}</td>
+        <td><span style="color:${meta.color};font-weight:600;font-size:.82rem;white-space:nowrap">${meta.label}</span></td>
+        <td style="font-weight:700;color:var(--blue)">${e.roomNumber || '—'}</td>
+        <td style="font-size:.83rem">${e.guestName || '—'}</td>
+        <td style="font-size:.78rem;color:var(--text-sub)">${e.actor === 'admin' ? `👤 ${e.actorEmail || 'admin'}` : '🧳 hóspede'}</td>
+        <td style="font-size:.78rem;color:var(--text-sub)">${det}${items ? ` · itens: ${items}` : ''}</td>
+      </tr>`;
+    }).join('')}
+    </tbody></table></div>`;
+}
+
 // ── Event bindings ─────────────────────────────────────────────────────────
 function bindEvents() {
   // Nav logo → home
@@ -1906,6 +2130,7 @@ function bindEvents() {
   // Payment
   qs('#btn-pay-pix').addEventListener('click', startPixPayment);
   qs('#btn-pay-card').addEventListener('click', startCardPayment);
+  qs('#btn-pay-googlepay').addEventListener('click', startGooglePayPayment);
   qs('#close-pix-modal').addEventListener('click', () => {
     qs('#pix-modal').style.display = 'none';
     if (state.pixUnsubscribe) { state.pixUnsubscribe(); state.pixUnsubscribe = null; }
@@ -2021,6 +2246,12 @@ function bindEvents() {
   qs('#filter-history-from').addEventListener('change', () => renderHistory(state.allHistory));
   qs('#filter-history-to').addEventListener('change',   () => renderHistory(state.allHistory));
   qs('#btn-export-history').addEventListener('click', exportHistoryExcel);
+
+  // Audit log filters
+  qs('#filter-audit-text')?.addEventListener('input',   renderAuditLog);
+  qs('#filter-audit-action')?.addEventListener('change', renderAuditLog);
+  qs('#filter-audit-from')?.addEventListener('change',   renderAuditLog);
+  qs('#filter-audit-to')?.addEventListener('change',     renderAuditLog);
 
   // Upload
   setupUpload();

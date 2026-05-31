@@ -7,6 +7,14 @@ const { MercadoPagoConfig, Payment, Preference } = require('mercadopago');
 admin.initializeApp();
 const db = admin.firestore();
 
+let _stripe = null;
+function getStripe() {
+  const key = process.env.STRIPE_SECRET_KEY;
+  if (!key || key.includes('COLOQUE_SUA')) throw new Error('STRIPE_SECRET_KEY não configurado — cole a chave do Stripe no .env');
+  if (!_stripe) _stripe = require('stripe')(key);
+  return _stripe;
+}
+
 const SITE_URL    = process.env.SITE_URL    || 'https://fast-checkout-hotel.web.app';
 // 2nd-gen Cloud Run URL (shown after each deploy as "Function URL (mercadoPagoWebhook)")
 const WEBHOOK_URL = process.env.WEBHOOK_URL || 'https://mercadopagowebhook-5fa5s6ykhq-uc.a.run.app';
@@ -158,6 +166,88 @@ exports.createCardPreference = functions.https.onCall(async (request) => {
     initPoint:       response.init_point,
     sandboxInitPoint: response.sandbox_init_point,
   };
+});
+
+// ─── Stripe — Google Pay ─────────────────────────────────────────────────────
+exports.createStripePaymentIntent = functions.https.onCall(async (request) => {
+  const { amount, roomId, guestName, roomNumber, rsv, items } = request.data;
+  console.log('[STRIPE] Criando PaymentIntent:', { amount, roomId, roomNumber });
+
+  const amountNum = parseFloat(Number(amount).toFixed(2));
+  if (!isFinite(amountNum) || amountNum <= 0)
+    throw new functions.https.HttpsError('invalid-argument', 'Valor inválido');
+
+  let stripe;
+  try { stripe = getStripe(); }
+  catch (e) {
+    console.error('[STRIPE] Config error:', e.message);
+    throw new functions.https.HttpsError('internal', e.message);
+  }
+
+  let pi;
+  try {
+    pi = await stripe.paymentIntents.create({
+      amount:                Math.round(amountNum * 100),
+      currency:              'brl',
+      payment_method_types:  ['card'],
+      description:           `Hotel Checkout — Quarto ${roomNumber} — ${guestName}`,
+      metadata:              { roomId, roomNumber, guestName },
+    });
+  } catch (e) {
+    console.error('[STRIPE] API error:', e.message);
+    throw new functions.https.HttpsError('internal', 'Erro Stripe: ' + e.message);
+  }
+
+  const paymentRef = await db.collection('payments').add({
+    roomId, roomNumber, guestName,
+    rsv: rsv || '', amount: amountNum, items: items || [],
+    method: 'google_pay', status: 'pending',
+    mercadoPagoId: '', pixCode: '', pixCodeBase64: '', preferenceId: '',
+    stripePaymentIntentId: pi.id,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  console.log('[STRIPE] PI criado:', pi.id);
+  return { paymentId: paymentRef.id, clientSecret: pi.client_secret, paymentIntentId: pi.id };
+});
+
+exports.confirmStripePayment = functions.https.onCall(async (request) => {
+  const { paymentIntentId, roomId, roomNumber, guestName, amount } = request.data;
+  console.log('[STRIPE] Confirmando PI:', paymentIntentId);
+
+  let stripe;
+  try { stripe = getStripe(); }
+  catch (e) { throw new functions.https.HttpsError('internal', e.message); }
+
+  const pi = await stripe.paymentIntents.retrieve(paymentIntentId);
+  console.log('[STRIPE] PI status:', pi.status);
+  if (pi.status !== 'succeeded')
+    throw new functions.https.HttpsError('failed-precondition', 'Pagamento não aprovado: ' + pi.status);
+
+  const byPI = await db.collection('payments')
+    .where('stripePaymentIntentId', '==', paymentIntentId).limit(1).get();
+
+  if (!byPI.empty) {
+    await byPI.docs[0].ref.update({
+      status: 'approved',
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  }
+
+  await db.collection('rooms').doc(roomId).update({
+    balance: 0, updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  await db.collection('notifications').add({
+    type: 'payment',
+    message: `💳 Google Pay confirmado — Quarto ${roomNumber} — ${guestName} — R$ ${Number(amount).toFixed(2)}`,
+    roomNumber, roomId, amount,
+    method: 'google_pay', read: false,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  return { success: true };
 });
 
 // ─── Webhook Mercado Pago ─────────────────────────────────────────────────────

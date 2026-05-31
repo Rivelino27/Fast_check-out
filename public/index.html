@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
+  <script src="https://js.stripe.com/v3/" async></script>
 </head>
 <body>
 
@@ -170,7 +171,13 @@
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/>
                 </svg>
-                <span data-i18n="pagar_cartao">Cartão / Google Pay</span>
+                <span data-i18n="pagar_cartao">Pagar com Cartão</span>
+              </button>
+              <button id="btn-pay-googlepay" class="btn-googlepay" style="display:none">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M12 10.8V13.2H15.6C15.36 14.52 14.16 15.6 12 15.6C9.6 15.6 7.68 13.68 7.68 11.28C7.68 8.88 9.6 6.96 12 6.96C13.08 6.96 14.04 7.32 14.76 7.92L16.56 6.12C15.36 5.04 13.8 4.32 12 4.32C8.16 4.32 5.04 7.44 5.04 11.28C5.04 15.12 8.16 18.24 12 18.24C16.08 18.24 18.72 15.36 18.72 11.4C18.72 10.92 18.6 10.56 18.6 10.8H12Z" fill="white"/>
+                </svg>
+                Google Pay
               </button>
             </div>
           </div>
@@ -218,6 +225,7 @@
           <button class="tab-btn"        data-tab="payments"  data-i18n="tab_pagamentos">Pagamentos</button>
           <button class="tab-btn"        data-tab="history"   data-i18n="tab_historico">Histórico</button>
           <button class="tab-btn"        data-tab="upload"    data-i18n="tab_upload">Upload</button>
+          <button class="tab-btn"        data-tab="audit"     >Auditoria</button>
           <button class="tab-btn"        data-tab="config"    data-i18n="tab_config">Config</button>
         </div>
       </div>
@@ -356,6 +364,27 @@
               <button id="btn-confirm-upload" class="btn-primary" style="max-width:200px" data-i18n="confirmar_upload_btn">Confirmar Upload</button>
             </div>
           </div>
+        </div>
+      </div>
+
+      <!-- Tab Auditoria -->
+      <div id="tab-audit" class="tab-content">
+        <div class="checkouts-toolbar">
+          <input type="text" id="filter-audit-text" class="input-neon input-sm" placeholder="Buscar ação, quarto ou usuário…">
+          <select id="filter-audit-action" class="input-neon input-sm" style="max-width:200px">
+            <option value="">Todas as ações</option>
+            <option value="payment">Pagamentos</option>
+            <option value="cart">Carrinho</option>
+            <option value="checkout">Check-outs</option>
+            <option value="config">Configurações</option>
+            <option value="token">Tokens</option>
+            <option value="room">Quartos</option>
+          </select>
+          <input type="date" id="filter-audit-from" class="input-neon input-sm">
+          <input type="date" id="filter-audit-to" class="input-neon input-sm">
+        </div>
+        <div id="audit-list">
+          <div class="empty-state"><div class="empty-state-icon">📋</div><p>Nenhum registro de auditoria.</p></div>
         </div>
       </div>
 

@@ -1,3 +1,18 @@
+Para ativar o Google Pay
+1. Crie conta em stripe.com (gratuito, paga só por transação)
+
+2. Copie as chaves em Developers → API Keys:
+
+Publishable key (pk_live_...) → cole em app.js na linha const STRIPE_PK = '...'
+Secret key (sk_live_...) → cole em functions/.env na linha STRIPE_SECRET_KEY=...
+3. No painel Stripe → Settings → Payment methods → Google Pay → adicione o domínio fast-checkout-hotel.web.app
+
+4. Execute firebase deploy --only functions após atualizar o .env
+
+O botão Google Pay ficará invisível até que as chaves sejam configuradas. Em dispositivos sem Google Pay configurado, o botão também não aparece.
+
+>> feito:
+
 Sobre configuração do Mercado Pago: a Access Token de produção (APP_USR-...) está correta. Para o PIX funcionar em produção precisa verificar no painel 
 MP se: (1) a conta está com identidade verificada (KYC completo), (2) existe uma chave PIX cadastrada na conta MP, e (3) o webhook está configurado com a 
 URL  https://us-central1-fast-checkout-hotel.cloudfunctions.net/mercadoPagoWebhook com evento "Pagamentos" selecionado.

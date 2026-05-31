@@ -1,3 +1,4 @@
+mudar menu adm url E:\DOCS\LINGUAGENS\sites html e css\Fast_check-out\public\js\app.js
 menu adm https://fast-checkout-hotel.web.app//admin-login-r27
 
 Run npm install inside functions/ (needed after firebase-functions was bumped to ^6.0.0):
